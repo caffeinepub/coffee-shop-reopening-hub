@@ -9,10 +9,6 @@ import {
 } from "../data/seedData";
 import { useActor } from "./useActor";
 
-// Bump this key when seed data changes to force a re-seed
-const SEED_VERSION = "v3";
-const SESSION_SEED_KEY = `alldaymia_seeded_${SEED_VERSION}`;
-
 export function useSeedData() {
   const { actor, isFetching } = useActor();
   const qc = useQueryClient();
@@ -27,7 +23,7 @@ export function useSeedData() {
     async function trySeed() {
       if (!actor) return;
 
-      const MAX_ATTEMPTS = 6;
+      const MAX_ATTEMPTS = 8;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
@@ -46,9 +42,14 @@ export function useSeedData() {
           let didSeed = false;
 
           // ── Tasks ────────────────────────────────────────────────────────
-          if (existingTasks.length < SEED_TASKS.length) {
+          // Always check by title to detect missing tasks (handles canister wipes)
+          const existingTaskTitles = new Set(existingTasks.map((t) => t.title));
+          const missingTasks = SEED_TASKS.filter(
+            (t) => !existingTaskTitles.has(t.title),
+          );
+          if (missingTasks.length > 0) {
             didSeed = true;
-            // Wipe any partial set first
+            // Wipe all and re-seed cleanly
             for (const t of existingTasks) {
               try {
                 await actor.deleteTask(t.id);
@@ -96,9 +97,6 @@ export function useSeedData() {
             }
           }
 
-          // Mark seeded this session
-          sessionStorage.setItem(SESSION_SEED_KEY, "1");
-
           if (didSeed) {
             await Promise.all([
               qc.invalidateQueries({ queryKey: ["tasks"] }),
@@ -116,7 +114,7 @@ export function useSeedData() {
             err,
           );
           if (attempt < MAX_ATTEMPTS) {
-            await new Promise((r) => setTimeout(r, 2000 * attempt));
+            await new Promise((r) => setTimeout(r, 1500 * attempt));
           }
         }
       }
