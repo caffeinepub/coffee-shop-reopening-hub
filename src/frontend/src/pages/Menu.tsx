@@ -133,8 +133,14 @@ function getSubsections(
   return [{ subLabel: null, items: catItems }];
 }
 
+function isPreviewItem(id: bigint) {
+  return id >= BigInt(1000);
+}
+
 export default function Menu() {
   const { data: items, isLoading } = useGetAllMenuItems();
+  const isSyncing =
+    !isLoading && items && items.length > 0 && isPreviewItem(items[0].id);
   const createItem = useCreateMenuItem();
   const updateItem = useUpdateMenuItem();
   const deleteItem = useDeleteMenuItem();
@@ -231,6 +237,14 @@ export default function Menu() {
         </button>
       </div>
 
+      {/* Syncing banner */}
+      {isSyncing && (
+        <div className="flex items-center gap-2 px-4 py-2.5 border border-border bg-background text-xs text-muted-foreground font-light uppercase tracking-widest">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-sand animate-pulse shrink-0" />
+          Syncing data — edits will be available in a moment
+        </div>
+      )}
+
       {/* Stats line */}
       <div className="flex items-center gap-6 text-xs text-muted-foreground uppercase tracking-widest font-light border-b border-border pb-5">
         <span>{items?.length ?? 0} items</span>
@@ -319,9 +333,11 @@ export default function Menu() {
                                   data-ocid={`menu.availability_toggle.${markerIdx}`}
                                   checked={item.available}
                                   onCheckedChange={() =>
+                                    !isPreviewItem(item.id) &&
                                     toggleAvailability(item)
                                   }
-                                  className="shrink-0 data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border"
+                                  disabled={isPreviewItem(item.id)}
+                                  className="shrink-0 data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border disabled:opacity-40"
                                 />
 
                                 {/* Info */}
@@ -353,22 +369,24 @@ export default function Menu() {
                                 )}
 
                                 {/* Actions */}
-                                <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button
-                                    type="button"
-                                    onClick={() => openEdit(item)}
-                                    className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeleteTarget(item.id)}
-                                    className="p-1.5 text-muted-foreground hover:text-brand-terracotta transition-colors"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
+                                {!isPreviewItem(item.id) && (
+                                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      type="button"
+                                      onClick={() => openEdit(item)}
+                                      className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteTarget(item.id)}
+                                      className="p-1.5 text-muted-foreground hover:text-brand-terracotta transition-colors"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
                               </motion.div>
                             );
                           })}

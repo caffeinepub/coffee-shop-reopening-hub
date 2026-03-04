@@ -6,7 +6,27 @@ import type {
   TeamNote,
   UserProfile,
 } from "../backend.d";
+import {
+  SEED_MENU_ITEMS,
+  SEED_SALES_GOALS,
+  SEED_TASKS,
+} from "../data/seedData";
 import { useActor } from "./useActor";
+
+// Synthetic IDs for fallback seed data shown before backend confirms
+function asSeedTasks(): Task[] {
+  return SEED_TASKS.map((t, i) => ({ id: BigInt(i + 1000), ...t }) as Task);
+}
+function asSeedMenuItems(): MenuItem[] {
+  return SEED_MENU_ITEMS.map(
+    (m, i) => ({ id: BigInt(i + 1000), ...m }) as MenuItem,
+  );
+}
+function asSeedGoals(): SalesGoal[] {
+  return SEED_SALES_GOALS.map(
+    (g, i) => ({ id: BigInt(i + 1000), ...g }) as SalesGoal,
+  );
+}
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 
@@ -15,10 +35,20 @@ export function useGetAllTasks() {
   return useQuery<Task[]>({
     queryKey: ["tasks"],
     queryFn: async () => {
-      if (!actor) return [];
-      return actor.getAllTasks();
+      if (!actor) return asSeedTasks();
+      const result = await actor.getAllTasks();
+      // If backend is empty (canister freshly deployed), show seed data
+      // until useSeedData finishes writing it
+      return result.length > 0 ? result : asSeedTasks();
     },
     enabled: !!actor && !isFetching,
+    // Refetch periodically until data is confirmed in backend
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      // Stop polling once we have real backend IDs (not our synthetic 1000+ ones)
+      if (data && data.length > 0 && data[0].id < BigInt(1000)) return false;
+      return 4000;
+    },
   });
 }
 
@@ -65,10 +95,16 @@ export function useGetAllMenuItems() {
   return useQuery<MenuItem[]>({
     queryKey: ["menuItems"],
     queryFn: async () => {
-      if (!actor) return [];
-      return actor.getAllMenuItems();
+      if (!actor) return asSeedMenuItems();
+      const result = await actor.getAllMenuItems();
+      return result.length > 0 ? result : asSeedMenuItems();
     },
     enabled: !!actor && !isFetching,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data && data.length > 0 && data[0].id < BigInt(1000)) return false;
+      return 4000;
+    },
   });
 }
 
@@ -115,10 +151,16 @@ export function useGetAllSalesGoals() {
   return useQuery<SalesGoal[]>({
     queryKey: ["salesGoals"],
     queryFn: async () => {
-      if (!actor) return [];
-      return actor.getAllSalesGoals();
+      if (!actor) return asSeedGoals();
+      const result = await actor.getAllSalesGoals();
+      return result.length > 0 ? result : asSeedGoals();
     },
     enabled: !!actor && !isFetching,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data && data.length > 0 && data[0].id < BigInt(1000)) return false;
+      return 4000;
+    },
   });
 }
 

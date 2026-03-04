@@ -111,8 +111,15 @@ const statusFilters: { value: FilterStatus; label: string }[] = [
   { value: TaskStatus.done, label: "Done" },
 ];
 
+// Items with id >= 1000 are "preview" seed items shown before backend confirms
+function isPreviewItem(id: bigint) {
+  return id >= BigInt(1000);
+}
+
 export default function Tasks() {
   const { data: tasks, isLoading } = useGetAllTasks();
+  const isSyncing =
+    !isLoading && tasks && tasks.length > 0 && isPreviewItem(tasks[0].id);
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
@@ -291,6 +298,14 @@ export default function Tasks() {
         </div>
       </div>
 
+      {/* Syncing banner */}
+      {isSyncing && (
+        <div className="flex items-center gap-2 px-4 py-2.5 border border-border bg-background text-xs text-muted-foreground font-light uppercase tracking-widest">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-sand animate-pulse shrink-0" />
+          Syncing data — edits will be available in a moment
+        </div>
+      )}
+
       {/* Task List */}
       {isLoading ? (
         <div className="space-y-px bg-border">
@@ -327,9 +342,16 @@ export default function Tasks() {
                 <button
                   type="button"
                   data-ocid={`tasks.status_toggle.${idx + 1}`}
-                  onClick={() => handleStatusToggle(task)}
-                  className={`shrink-0 text-xs px-2.5 py-1 font-medium tracking-wide transition-opacity hover:opacity-70 rounded-none ${statusBadgeClass[task.status]}`}
-                  title="Click to advance status"
+                  onClick={() =>
+                    !isPreviewItem(task.id) && handleStatusToggle(task)
+                  }
+                  disabled={isPreviewItem(task.id)}
+                  className={`shrink-0 text-xs px-2.5 py-1 font-medium tracking-wide transition-opacity rounded-none ${isPreviewItem(task.id) ? "opacity-40 cursor-not-allowed" : "hover:opacity-70"} ${statusBadgeClass[task.status]}`}
+                  title={
+                    isPreviewItem(task.id)
+                      ? "Syncing..."
+                      : "Click to advance status"
+                  }
                 >
                   <span className="flex items-center gap-1">
                     {statusLabels[task.status]}
@@ -377,24 +399,26 @@ export default function Tasks() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    type="button"
-                    data-ocid={`tasks.edit_button.${idx + 1}`}
-                    onClick={() => openEdit(task)}
-                    className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    data-ocid={`tasks.delete_button.${idx + 1}`}
-                    onClick={() => setDeleteTarget(task.id)}
-                    className="p-1.5 text-muted-foreground hover:text-brand-terracotta transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {!isPreviewItem(task.id) && (
+                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      data-ocid={`tasks.edit_button.${idx + 1}`}
+                      onClick={() => openEdit(task)}
+                      className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      data-ocid={`tasks.delete_button.${idx + 1}`}
+                      onClick={() => setDeleteTarget(task.id)}
+                      className="p-1.5 text-muted-foreground hover:text-brand-terracotta transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </motion.div>
             ))}
           </div>
