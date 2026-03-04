@@ -13,10 +13,15 @@ export function useSeedData() {
   const { actor, isFetching } = useActor();
   const qc = useQueryClient();
   const runningRef = useRef(false);
+  // Track which actor principal we last seeded so we re-run when actor changes
+  const seededForRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!actor || isFetching) return;
+    // Allow re-run if actor identity changed (e.g. new login)
+    const actorKey = actor.toString?.() ?? "actor";
     if (runningRef.current) return;
+    if (seededForRef.current === actorKey) return;
 
     runningRef.current = true;
 
@@ -107,6 +112,7 @@ export function useSeedData() {
           }
 
           // Done
+          seededForRef.current = actorKey;
           break;
         } catch (err) {
           console.error(

@@ -45,6 +45,8 @@ export function useGetAllTasks() {
       return result.length > 0 ? result : asSeedTasks();
     },
     enabled: !!actor && !isFetching,
+    // Show seed data immediately while waiting for backend
+    placeholderData: asSeedTasks,
     // Refetch periodically until data is confirmed in backend
     refetchInterval: (query) => {
       const data = query.state.data;
@@ -103,6 +105,8 @@ export function useGetAllMenuItems() {
       return result.length > 0 ? result : asSeedMenuItems();
     },
     enabled: !!actor && !isFetching,
+    // Show seed data immediately while waiting for backend
+    placeholderData: asSeedMenuItems,
     refetchInterval: (query) => {
       const data = query.state.data;
       if (data && data.length > 0 && data[0].id < BigInt(1000)) return false;
@@ -159,6 +163,8 @@ export function useGetAllSalesGoals() {
       return result.length > 0 ? result : asSeedGoals();
     },
     enabled: !!actor && !isFetching,
+    // Show seed data immediately while waiting for backend
+    placeholderData: asSeedGoals,
     refetchInterval: (query) => {
       const data = query.state.data;
       if (data && data.length > 0 && data[0].id < BigInt(1000)) return false;
