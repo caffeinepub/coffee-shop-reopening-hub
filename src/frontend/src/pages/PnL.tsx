@@ -31,7 +31,7 @@ import {
   useUpdateRevenueEntry,
 } from "@/hooks/useQueries";
 import { Loader2, Paperclip, Pencil, Plus, Trash2, Upload } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -192,9 +192,13 @@ function ExpenseDialog({
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
 
-  const [form, setForm] = useState<ExpenseFormState>(() => {
+  const [form, setForm] = useState<ExpenseFormState>(emptyExpenseForm);
+
+  // Sync form whenever the dialog opens or the expense being edited changes
+  useEffect(() => {
+    if (!open) return;
     if (editingExpense) {
-      return {
+      setForm({
         description: editingExpense.description,
         amount: String(editingExpense.amount),
         category: editingExpense.category,
@@ -203,41 +207,21 @@ function ExpenseDialog({
         paymentStatus: editingExpense.paymentStatus,
         attachmentUrl: editingExpense.attachmentUrl ?? "",
         attachmentName: editingExpense.attachmentName ?? "",
-      };
+      });
+    } else {
+      setForm(
+        prefill ? { ...emptyExpenseForm(), ...prefill } : emptyExpenseForm(),
+      );
     }
-    if (prefill) {
-      return { ...emptyExpenseForm(), ...prefill };
-    }
-    return emptyExpenseForm();
-  });
+  }, [open, editingExpense, prefill]);
 
-  // Reset form when dialog opens/closes or editingExpense changes
+  // Reset form when dialog closes
   const handleOpenChange = (o: boolean) => {
     if (!o) {
       onClose();
       setForm(emptyExpenseForm());
     }
   };
-
-  // Sync form if editingExpense prop changes while dialog is open
-  const syncedRef = { current: editingExpense };
-  if (syncedRef.current !== editingExpense && open) {
-    setForm(
-      editingExpense
-        ? {
-            description: editingExpense.description,
-            amount: String(editingExpense.amount),
-            category: editingExpense.category,
-            date: editingExpense.date,
-            notes: editingExpense.notes,
-            paymentStatus: editingExpense.paymentStatus,
-            attachmentUrl: editingExpense.attachmentUrl ?? "",
-            attachmentName: editingExpense.attachmentName ?? "",
-          }
-        : emptyExpenseForm(),
-    );
-    syncedRef.current = editingExpense;
-  }
 
   const isPending = createExpense.isPending || updateExpense.isPending;
 
@@ -490,16 +474,22 @@ function RevenueDialog({ open, onClose, editingEntry }: RevenueDialogProps) {
   const createRevenue = useCreateRevenueEntry();
   const updateRevenue = useUpdateRevenueEntry();
 
-  const [form, setForm] = useState<RevenueFormState>(() =>
-    editingEntry
-      ? {
-          source: editingEntry.source,
-          date: editingEntry.date,
-          totalRevenue: String(editingEntry.totalRevenue),
-          notes: editingEntry.notes,
-        }
-      : emptyRevenueForm(),
-  );
+  const [form, setForm] = useState<RevenueFormState>(emptyRevenueForm);
+
+  // Sync form whenever the dialog opens or the entry being edited changes
+  useEffect(() => {
+    if (!open) return;
+    if (editingEntry) {
+      setForm({
+        source: editingEntry.source,
+        date: editingEntry.date,
+        totalRevenue: String(editingEntry.totalRevenue),
+        notes: editingEntry.notes,
+      });
+    } else {
+      setForm(emptyRevenueForm());
+    }
+  }, [open, editingEntry]);
 
   const handleOpenChange = (o: boolean) => {
     if (!o) {

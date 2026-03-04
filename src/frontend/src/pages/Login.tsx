@@ -17,7 +17,7 @@ export default function Login() {
           </p>
         </div>
         <div className="space-y-6">
-          {["Tasks", "Menu", "Sales Goals", "Team Notes"].map((item) => (
+          {["Tasks", "Menu", "Sales Goals", "Team Chat"].map((item) => (
             <div key={item} className="flex items-center gap-3">
               <span className="w-px h-4 bg-sidebar-foreground/20 block" />
               <p className="text-sidebar-foreground/40 text-xs uppercase tracking-widest font-light">

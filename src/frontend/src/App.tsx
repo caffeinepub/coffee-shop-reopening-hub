@@ -7,11 +7,9 @@ import Login from "@/pages/Login";
 import MenuPage from "@/pages/Menu";
 import PnL from "@/pages/PnL";
 import Tasks from "@/pages/Tasks";
-import TeamNotes from "@/pages/TeamNotes";
 import {
   CheckSquare,
   Coffee,
-  FileText,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -85,7 +83,7 @@ function WhoAreYou({ onSelect }: { onSelect: (name: TeamMember) => void }) {
   );
 }
 
-type Page = "dashboard" | "tasks" | "menu" | "goals" | "notes" | "chat";
+type Page = "dashboard" | "tasks" | "menu" | "goals" | "chat";
 
 const navItems: {
   id: Page;
@@ -103,15 +101,9 @@ const navItems: {
   { id: "menu", label: "Menu", icon: Coffee, ocid: "nav.menu_link" },
   {
     id: "goals",
-    label: "Sales",
+    label: "Financials",
     icon: TrendingUp,
     ocid: "nav.goals_link",
-  },
-  {
-    id: "notes",
-    label: "Team Notes",
-    icon: FileText,
-    ocid: "nav.notes_link",
   },
   {
     id: "chat",
@@ -154,7 +146,6 @@ function AppShell() {
     tasks: <Tasks />,
     menu: <MenuPage />,
     goals: <PnL />,
-    notes: <TeamNotes />,
     chat: <Chat />,
   };
 

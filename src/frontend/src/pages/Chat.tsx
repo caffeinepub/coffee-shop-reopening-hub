@@ -27,7 +27,7 @@ import {
   useGetAllChatMessages,
 } from "@/hooks/useQueries";
 import { useStorageClient } from "@/hooks/useStorageClient";
-import { Loader2, Paperclip, Send, Trash2, X } from "lucide-react";
+import { DollarSign, Loader2, Paperclip, Send, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -455,10 +455,18 @@ interface MessageItemProps {
   index: number;
   currentUser: string | null;
   onDelete: (id: bigint) => void;
+  onAddToPnL: (msg: ChatMessage) => void;
 }
 
-function MessageItem({ msg, index, currentUser, onDelete }: MessageItemProps) {
+function MessageItem({
+  msg,
+  index,
+  currentUser,
+  onDelete,
+  onAddToPnL,
+}: MessageItemProps) {
   const isOwn = msg.authorName === currentUser;
+  const hasAmount = extractAmount(msg.body) !== null;
 
   return (
     <motion.div
@@ -544,9 +552,20 @@ function MessageItem({ msg, index, currentUser, onDelete }: MessageItemProps) {
         )}
       </div>
 
-      {/* Delete — only own messages, visible on hover */}
-      {isOwn && (
-        <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Actions — visible on hover */}
+      <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
+        {hasAmount && (
+          <button
+            type="button"
+            data-ocid={`chat.pnl_add_button.${index}`}
+            onClick={() => onAddToPnL(msg)}
+            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            title="Add to P&L"
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {isOwn && (
           <button
             type="button"
             data-ocid={`chat.delete_button.${index}`}
@@ -556,8 +575,8 @@ function MessageItem({ msg, index, currentUser, onDelete }: MessageItemProps) {
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -671,20 +690,26 @@ export default function Chat() {
         attachmentName,
       });
 
-      // After message is sent, check if we should suggest adding to P&L
+      // Clear compose fields first
+      setBody("");
+      setFile(null);
+      setUploadProgress(null);
+
+      // After message is sent, check if we should suggest adding to P&L.
+      // Deferred via setTimeout so the dialog open doesn't get swallowed by
+      // the same React flush that clears the form state.
       const parsed = parseMessageForExpense(
         trimmed,
         attachmentUrl,
         attachmentName,
       );
       if (parsed) {
-        setParsedExpense(parsed);
-        setPnlDialogOpen(true);
+        setTimeout(() => {
+          setParsedExpense(parsed);
+          setPnlDialogOpen(true);
+        }, 0);
       }
 
-      setBody("");
-      setFile(null);
-      setUploadProgress(null);
       // Scroll after a tick to capture the new message
       setTimeout(() => {
         if (feedRef.current) {
@@ -702,6 +727,18 @@ export default function Chat() {
       await deleteMessage.mutateAsync(id);
     } catch {
       toast.error("Failed to delete message.");
+    }
+  }
+
+  function handleAddToPnLFromMessage(msg: ChatMessage) {
+    const parsed = parseMessageForExpense(
+      msg.body,
+      msg.attachmentUrl ?? null,
+      msg.attachmentName ?? null,
+    );
+    if (parsed) {
+      setParsedExpense(parsed);
+      setPnlDialogOpen(true);
     }
   }
 
@@ -811,6 +848,7 @@ export default function Chat() {
                   index={idx + 1}
                   currentUser={currentUser}
                   onDelete={handleDelete}
+                  onAddToPnL={handleAddToPnLFromMessage}
                 />
               ))}
             </div>

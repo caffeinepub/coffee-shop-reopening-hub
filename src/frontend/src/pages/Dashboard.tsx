@@ -4,21 +4,9 @@ import {
   useGetAllMenuItems,
   useGetAllSalesGoals,
   useGetAllTasks,
-  useGetAllTeamNotes,
 } from "@/hooks/useQueries";
 import { motion } from "motion/react";
 import { useMemo } from "react";
-
-function formatTimestamp(ts: bigint): string {
-  const ms = Number(ts);
-  const date = new Date(ms);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 const periodLabel: Record<GoalPeriod, string> = {
   [GoalPeriod.daily]: "Daily",
@@ -39,7 +27,6 @@ export default function Dashboard() {
   const { data: tasks, isLoading: tasksLoading } = useGetAllTasks();
   const { data: menuItems, isLoading: menuLoading } = useGetAllMenuItems();
   const { data: goals, isLoading: goalsLoading } = useGetAllSalesGoals();
-  const { data: notes, isLoading: notesLoading } = useGetAllTeamNotes();
 
   const taskStats = useMemo(() => {
     if (!tasks)
@@ -56,13 +43,6 @@ export default function Dashboard() {
       ).length,
     };
   }, [tasks]);
-
-  const recentNotes = useMemo(() => {
-    if (!notes) return [];
-    return [...notes]
-      .sort((a, b) => Number(b.timestamp) - Number(a.timestamp))
-      .slice(0, 3);
-  }, [notes]);
 
   const activeGoals = useMemo(() => goals ?? [], [goals]);
 
@@ -275,48 +255,6 @@ export default function Dashboard() {
           )}
         </motion.div>
       </div>
-
-      {/* Recent Notes */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.35 }}
-      >
-        <p className="label-caps mb-5">Recent Notes</p>
-        {notesLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        ) : recentNotes.length === 0 ? (
-          <p className="text-sm text-muted-foreground font-light tracking-wide">
-            No team notes yet.
-          </p>
-        ) : (
-          <div className="divide-y divide-border">
-            {recentNotes.map((note) => (
-              <div
-                key={note.id.toString()}
-                className="py-5 first:pt-0 last:pb-0"
-              >
-                <div className="flex items-start justify-between gap-6">
-                  <div className="min-w-0">
-                    <p className="text-sm font-normal tracking-wide text-foreground">
-                      {note.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground font-light mt-1.5 line-clamp-2 leading-relaxed">
-                      {note.body}
-                    </p>
-                  </div>
-                  <p className="text-xs text-muted-foreground font-light shrink-0 tabular-nums whitespace-nowrap">
-                    {formatTimestamp(note.timestamp)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </motion.div>
     </div>
   );
 }

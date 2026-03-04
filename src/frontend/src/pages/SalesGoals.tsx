@@ -121,7 +121,7 @@ export default function SalesGoals() {
         <div>
           <p className="label-caps mb-1">Tracking</p>
           <h1 className="text-3xl font-normal uppercase tracking-widest text-foreground">
-            Sales
+            Financials
           </h1>
         </div>
         <button
