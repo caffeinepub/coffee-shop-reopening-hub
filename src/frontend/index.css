@@ -1,0 +1,147 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.125rem;
+
+    /* ALL DAY — warm off-white + near-black, restrained sand accents */
+
+    /* Background: warm cream */
+    --background: 0.97 0.008 82;
+    /* Foreground: near-black, very slightly warm */
+    --foreground: 0.10 0.008 50;
+
+    /* Card: true off-white */
+    --card: 0.99 0.004 82;
+    --card-foreground: 0.10 0.008 50;
+
+    /* Popover */
+    --popover: 0.99 0.004 82;
+    --popover-foreground: 0.10 0.008 50;
+
+    /* Primary: near-black for buttons/links */
+    --primary: 0.12 0.008 50;
+    --primary-foreground: 0.97 0.008 82;
+
+    /* Secondary: warm sand */
+    --secondary: 0.92 0.015 78;
+    --secondary-foreground: 0.12 0.008 50;
+
+    /* Muted: very light warm gray */
+    --muted: 0.93 0.010 80;
+    --muted-foreground: 0.48 0.012 60;
+
+    /* Accent: warm sand/tan */
+    --accent: 0.88 0.020 78;
+    --accent-foreground: 0.12 0.008 50;
+
+    /* Destructive: muted terracotta */
+    --destructive: 0.52 0.14 30;
+    --destructive-foreground: 0.97 0.008 82;
+
+    /* Border: barely-there warm gray */
+    --border: 0.88 0.008 75;
+    --input: 0.88 0.008 75;
+    --ring: 0.30 0.008 50;
+
+    /* Brand extras */
+    --sand: 0.75 0.04 75;
+    --sage: 0.88 0.020 80;
+    --terracotta: 0.52 0.14 30;
+
+    /* Charts */
+    --chart-1: 0.30 0.010 50;
+    --chart-2: 0.55 0.04 75;
+    --chart-3: 0.72 0.030 80;
+    --chart-4: 0.52 0.14 30;
+    --chart-5: 0.75 0.04 75;
+
+    /* Sidebar: deep espresso / near-black */
+    --sidebar: 0.11 0.010 48;
+    --sidebar-foreground: 0.92 0.012 80;
+    --sidebar-primary: 0.88 0.016 80;
+    --sidebar-primary-foreground: 0.11 0.010 48;
+    --sidebar-accent: 0.18 0.010 48;
+    --sidebar-accent-foreground: 0.92 0.008 80;
+    --sidebar-border: 0.20 0.010 48;
+    --sidebar-ring: 0.40 0.010 48;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: 0.01em;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+@layer components {
+  /* ALL DAY typography utilities */
+  .heading-editorial {
+    @apply uppercase tracking-widest font-normal text-foreground;
+  }
+
+  .label-caps {
+    @apply uppercase tracking-widest text-xs font-medium text-muted-foreground;
+  }
+
+  /* Status badges — muted, outlined */
+  .badge-todo {
+    background: oklch(0.92 0.008 240 / 0.5);
+    color: oklch(0.35 0.015 240);
+    border: 1px solid oklch(0.80 0.010 240);
+  }
+  .badge-inprogress {
+    background: oklch(0.94 0.025 75 / 0.5);
+    color: oklch(0.38 0.06 60);
+    border: 1px solid oklch(0.80 0.035 72);
+  }
+  .badge-done {
+    background: oklch(0.93 0.012 80 / 0.5);
+    color: oklch(0.38 0.020 75);
+    border: 1px solid oklch(0.76 0.018 78);
+  }
+
+  /* Priority badges — muted */
+  .badge-high {
+    background: oklch(0.94 0.04 30 / 0.5);
+    color: oklch(0.40 0.12 28);
+    border: 1px solid oklch(0.78 0.08 30);
+  }
+  .badge-medium {
+    background: oklch(0.94 0.025 72 / 0.5);
+    color: oklch(0.40 0.06 62);
+    border: 1px solid oklch(0.80 0.030 72);
+  }
+  .badge-low {
+    background: oklch(0.93 0.005 240 / 0.5);
+    color: oklch(0.45 0.008 240);
+    border: 1px solid oklch(0.82 0.008 240);
+  }
+
+  /* Progress bar — warm tone fill */
+  .progress-fill {
+    background: oklch(0.25 0.010 50);
+  }
+
+  /* Thin separator */
+  .separator-warm {
+    border-color: oklch(0.88 0.008 75);
+  }
+}
