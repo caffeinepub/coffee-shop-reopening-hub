@@ -1,10 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import { useSeedData } from "@/hooks/useSeedData";
+import Chat from "@/pages/Chat";
 import Dashboard from "@/pages/Dashboard";
 import Login from "@/pages/Login";
 import MenuPage from "@/pages/Menu";
-import SalesGoals from "@/pages/SalesGoals";
+import PnL from "@/pages/PnL";
 import Tasks from "@/pages/Tasks";
 import TeamNotes from "@/pages/TeamNotes";
 import {
@@ -14,6 +15,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquare,
   TrendingUp,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -83,7 +85,7 @@ function WhoAreYou({ onSelect }: { onSelect: (name: TeamMember) => void }) {
   );
 }
 
-type Page = "dashboard" | "tasks" | "menu" | "goals" | "notes";
+type Page = "dashboard" | "tasks" | "menu" | "goals" | "notes" | "chat";
 
 const navItems: {
   id: Page;
@@ -110,6 +112,12 @@ const navItems: {
     label: "Team Notes",
     icon: FileText,
     ocid: "nav.notes_link",
+  },
+  {
+    id: "chat",
+    label: "Team Chat",
+    icon: MessageSquare,
+    ocid: "nav.chat_link",
   },
 ];
 
@@ -145,8 +153,9 @@ function AppShell() {
     dashboard: <Dashboard />,
     tasks: <Tasks />,
     menu: <MenuPage />,
-    goals: <SalesGoals />,
+    goals: <PnL />,
     notes: <TeamNotes />,
+    chat: <Chat />,
   };
 
   const SidebarContent = () => (

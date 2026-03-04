@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  ChatMessage,
+  Expense,
   MenuItem,
+  RevenueEntry,
   SalesGoal,
   Task,
   TeamNote,
@@ -247,6 +250,160 @@ export function useDeleteTeamNote() {
       return actor.deleteTeamNote(id);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["teamNotes"] }),
+  });
+}
+
+// ─── Chat Messages ────────────────────────────────────────────────────────────
+
+export function useGetAllChatMessages() {
+  const { actor, isFetching } = useActor();
+  return useQuery<ChatMessage[]>({
+    queryKey: ["chatMessages"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllChatMessages();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 15000, // Poll every 15s for live-ish feel
+  });
+}
+
+export function useCreateChatMessage() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      authorName,
+      body,
+      attachmentUrl,
+      attachmentName,
+    }: {
+      authorName: string;
+      body: string;
+      attachmentUrl: string | null;
+      attachmentName: string | null;
+    }) => {
+      if (!actor) throw new Error("No actor");
+      return actor.createChatMessage(
+        authorName,
+        body,
+        attachmentUrl,
+        attachmentName,
+      );
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chatMessages"] }),
+  });
+}
+
+export function useDeleteChatMessage() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => {
+      if (!actor) throw new Error("No actor");
+      return actor.deleteChatMessage(id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chatMessages"] }),
+  });
+}
+
+// ─── Expenses ─────────────────────────────────────────────────────────────────
+
+export function useGetAllExpenses() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Expense[]>({
+    queryKey: ["expenses"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllExpenses();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useCreateExpense() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (expense: Expense) => {
+      if (!actor) throw new Error("No actor");
+      return actor.createExpense(expense);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+}
+
+export function useUpdateExpense() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (expense: Expense) => {
+      if (!actor) throw new Error("No actor");
+      return actor.updateExpense(expense);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+}
+
+export function useDeleteExpense() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => {
+      if (!actor) throw new Error("No actor");
+      return actor.deleteExpense(id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+}
+
+// ─── Revenue Entries ──────────────────────────────────────────────────────────
+
+export function useGetAllRevenueEntries() {
+  const { actor, isFetching } = useActor();
+  return useQuery<RevenueEntry[]>({
+    queryKey: ["revenueEntries"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllRevenueEntries();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useCreateRevenueEntry() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (entry: RevenueEntry) => {
+      if (!actor) throw new Error("No actor");
+      return actor.createRevenueEntry(entry);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["revenueEntries"] }),
+  });
+}
+
+export function useUpdateRevenueEntry() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (entry: RevenueEntry) => {
+      if (!actor) throw new Error("No actor");
+      return actor.updateRevenueEntry(entry);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["revenueEntries"] }),
+  });
+}
+
+export function useDeleteRevenueEntry() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => {
+      if (!actor) throw new Error("No actor");
+      return actor.deleteRevenueEntry(id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["revenueEntries"] }),
   });
 }
 

@@ -10,6 +10,38 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface ChatMessage {
+  'id' : bigint,
+  'attachmentUrl' : [] | [string],
+  'body' : string,
+  'tags' : Array<string>,
+  'authorName' : string,
+  'timestamp' : bigint,
+  'attachmentName' : [] | [string],
+}
+export interface Expense {
+  'id' : bigint,
+  'attachmentUrl' : [] | [string],
+  'paymentStatus' : PaymentStatus,
+  'date' : string,
+  'createdBy' : string,
+  'description' : string,
+  'notes' : string,
+  'category' : ExpenseCategory,
+  'attachmentName' : [] | [string],
+  'amount' : number,
+}
+export type ExpenseCategory = { 'cleaning' : null } |
+  { 'equipment' : null } |
+  { 'marketing' : null } |
+  { 'supplies' : null } |
+  { 'custom' : null } |
+  { 'rent' : null } |
+  { 'utilities' : null } |
+  { 'labor' : null } |
+  { 'website' : null } |
+  { 'legal' : null } |
+  { 'licensing' : null };
 export type GoalPeriod = { 'monthly' : null } |
   { 'daily' : null } |
   { 'weekly' : null };
@@ -24,6 +56,16 @@ export interface MenuItem {
   'available' : boolean,
   'category' : MenuCategory,
   'price' : number,
+}
+export type PaymentStatus = { 'paid' : null } |
+  { 'payable' : null };
+export interface RevenueEntry {
+  'id' : bigint,
+  'source' : string,
+  'date' : string,
+  'createdBy' : string,
+  'notes' : string,
+  'totalRevenue' : number,
 }
 export interface SalesGoal {
   'id' : bigint,
@@ -63,31 +105,75 @@ export interface UserProfile { 'name' : string }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface _CaffeineStorageCreateCertificateResult {
+  'method' : string,
+  'blob_hash' : string,
+}
+export interface _CaffeineStorageRefillInformation {
+  'proposed_top_up_amount' : [] | [bigint],
+}
+export interface _CaffeineStorageRefillResult {
+  'success' : [] | [boolean],
+  'topped_up_amount' : [] | [bigint],
+}
 export interface _SERVICE {
+  '_caffeineStorageBlobIsLive' : ActorMethod<[Uint8Array], boolean>,
+  '_caffeineStorageBlobsToDelete' : ActorMethod<[], Array<Uint8Array>>,
+  '_caffeineStorageConfirmBlobDeletion' : ActorMethod<
+    [Array<Uint8Array>],
+    undefined
+  >,
+  '_caffeineStorageCreateCertificate' : ActorMethod<
+    [string],
+    _CaffeineStorageCreateCertificateResult
+  >,
+  '_caffeineStorageRefillCashier' : ActorMethod<
+    [[] | [_CaffeineStorageRefillInformation]],
+    _CaffeineStorageRefillResult
+  >,
+  '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'createChatMessage' : ActorMethod<
+    [string, string, [] | [string], [] | [string]],
+    ChatMessage
+  >,
+  'createExpense' : ActorMethod<[Expense], Expense>,
   'createMenuItem' : ActorMethod<[MenuItem], MenuItem>,
+  'createRevenueEntry' : ActorMethod<[RevenueEntry], RevenueEntry>,
   'createSalesGoal' : ActorMethod<[SalesGoal], SalesGoal>,
   'createTask' : ActorMethod<[Task], Task>,
   'createTeamNote' : ActorMethod<[TeamNote], TeamNote>,
+  'deleteChatMessage' : ActorMethod<[bigint], undefined>,
+  'deleteExpense' : ActorMethod<[bigint], undefined>,
   'deleteMenuItem' : ActorMethod<[bigint], undefined>,
+  'deleteRevenueEntry' : ActorMethod<[bigint], undefined>,
   'deleteSalesGoal' : ActorMethod<[bigint], undefined>,
   'deleteTask' : ActorMethod<[bigint], undefined>,
   'deleteTeamNote' : ActorMethod<[bigint], undefined>,
+  'getAllChatMessages' : ActorMethod<[], Array<ChatMessage>>,
+  'getAllExpenses' : ActorMethod<[], Array<Expense>>,
   'getAllMenuItems' : ActorMethod<[], Array<MenuItem>>,
+  'getAllRevenueEntries' : ActorMethod<[], Array<RevenueEntry>>,
   'getAllSalesGoals' : ActorMethod<[], Array<SalesGoal>>,
   'getAllTasks' : ActorMethod<[], Array<Task>>,
   'getAllTeamNotes' : ActorMethod<[], Array<TeamNote>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getExpense' : ActorMethod<[bigint], Expense>,
+  'getExpensesByDateRange' : ActorMethod<[string, string], Array<Expense>>,
   'getMenuItem' : ActorMethod<[bigint], MenuItem>,
+  'getRevenueByDateRange' : ActorMethod<[string, string], Array<RevenueEntry>>,
+  'getRevenueEntry' : ActorMethod<[bigint], RevenueEntry>,
   'getSalesGoal' : ActorMethod<[bigint], SalesGoal>,
   'getTask' : ActorMethod<[bigint], Task>,
   'getTeamNote' : ActorMethod<[bigint], TeamNote>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'updateExpense' : ActorMethod<[Expense], Expense>,
   'updateMenuItem' : ActorMethod<[MenuItem], MenuItem>,
+  'updateRevenueEntry' : ActorMethod<[RevenueEntry], RevenueEntry>,
   'updateSalesGoal' : ActorMethod<[SalesGoal], SalesGoal>,
   'updateTask' : ActorMethod<[Task], Task>,
   'updateTeamNote' : ActorMethod<[TeamNote], TeamNote>,

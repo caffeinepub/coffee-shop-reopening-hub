@@ -8,10 +8,59 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const _CaffeineStorageCreateCertificateResult = IDL.Record({
+  'method' : IDL.Text,
+  'blob_hash' : IDL.Text,
+});
+export const _CaffeineStorageRefillInformation = IDL.Record({
+  'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
+});
+export const _CaffeineStorageRefillResult = IDL.Record({
+  'success' : IDL.Opt(IDL.Bool),
+  'topped_up_amount' : IDL.Opt(IDL.Nat),
+});
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
+});
+export const ChatMessage = IDL.Record({
+  'id' : IDL.Nat,
+  'attachmentUrl' : IDL.Opt(IDL.Text),
+  'body' : IDL.Text,
+  'tags' : IDL.Vec(IDL.Text),
+  'authorName' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'attachmentName' : IDL.Opt(IDL.Text),
+});
+export const PaymentStatus = IDL.Variant({
+  'paid' : IDL.Null,
+  'payable' : IDL.Null,
+});
+export const ExpenseCategory = IDL.Variant({
+  'cleaning' : IDL.Null,
+  'equipment' : IDL.Null,
+  'marketing' : IDL.Null,
+  'supplies' : IDL.Null,
+  'custom' : IDL.Null,
+  'rent' : IDL.Null,
+  'utilities' : IDL.Null,
+  'labor' : IDL.Null,
+  'website' : IDL.Null,
+  'legal' : IDL.Null,
+  'licensing' : IDL.Null,
+});
+export const Expense = IDL.Record({
+  'id' : IDL.Nat,
+  'attachmentUrl' : IDL.Opt(IDL.Text),
+  'paymentStatus' : PaymentStatus,
+  'date' : IDL.Text,
+  'createdBy' : IDL.Text,
+  'description' : IDL.Text,
+  'notes' : IDL.Text,
+  'category' : ExpenseCategory,
+  'attachmentName' : IDL.Opt(IDL.Text),
+  'amount' : IDL.Float64,
 });
 export const MenuCategory = IDL.Variant({
   'coldDrinks' : IDL.Null,
@@ -26,6 +75,14 @@ export const MenuItem = IDL.Record({
   'available' : IDL.Bool,
   'category' : MenuCategory,
   'price' : IDL.Float64,
+});
+export const RevenueEntry = IDL.Record({
+  'id' : IDL.Nat,
+  'source' : IDL.Text,
+  'date' : IDL.Text,
+  'createdBy' : IDL.Text,
+  'notes' : IDL.Text,
+  'totalRevenue' : IDL.Float64,
 });
 export const GoalPeriod = IDL.Variant({
   'monthly' : IDL.Null,
@@ -75,23 +132,74 @@ export const TeamNote = IDL.Record({
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
 
 export const idlService = IDL.Service({
+  '_caffeineStorageBlobIsLive' : IDL.Func(
+      [IDL.Vec(IDL.Nat8)],
+      [IDL.Bool],
+      ['query'],
+    ),
+  '_caffeineStorageBlobsToDelete' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      ['query'],
+    ),
+  '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      [],
+      [],
+    ),
+  '_caffeineStorageCreateCertificate' : IDL.Func(
+      [IDL.Text],
+      [_CaffeineStorageCreateCertificateResult],
+      [],
+    ),
+  '_caffeineStorageRefillCashier' : IDL.Func(
+      [IDL.Opt(_CaffeineStorageRefillInformation)],
+      [_CaffeineStorageRefillResult],
+      [],
+    ),
+  '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'createChatMessage' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+      [ChatMessage],
+      [],
+    ),
+  'createExpense' : IDL.Func([Expense], [Expense], []),
   'createMenuItem' : IDL.Func([MenuItem], [MenuItem], []),
+  'createRevenueEntry' : IDL.Func([RevenueEntry], [RevenueEntry], []),
   'createSalesGoal' : IDL.Func([SalesGoal], [SalesGoal], []),
   'createTask' : IDL.Func([Task], [Task], []),
   'createTeamNote' : IDL.Func([TeamNote], [TeamNote], []),
+  'deleteChatMessage' : IDL.Func([IDL.Nat], [], []),
+  'deleteExpense' : IDL.Func([IDL.Nat], [], []),
   'deleteMenuItem' : IDL.Func([IDL.Nat], [], []),
+  'deleteRevenueEntry' : IDL.Func([IDL.Nat], [], []),
   'deleteSalesGoal' : IDL.Func([IDL.Nat], [], []),
   'deleteTask' : IDL.Func([IDL.Nat], [], []),
   'deleteTeamNote' : IDL.Func([IDL.Nat], [], []),
+  'getAllChatMessages' : IDL.Func([], [IDL.Vec(ChatMessage)], ['query']),
+  'getAllExpenses' : IDL.Func([], [IDL.Vec(Expense)], ['query']),
   'getAllMenuItems' : IDL.Func([], [IDL.Vec(MenuItem)], ['query']),
+  'getAllRevenueEntries' : IDL.Func([], [IDL.Vec(RevenueEntry)], ['query']),
   'getAllSalesGoals' : IDL.Func([], [IDL.Vec(SalesGoal)], ['query']),
   'getAllTasks' : IDL.Func([], [IDL.Vec(Task)], ['query']),
   'getAllTeamNotes' : IDL.Func([], [IDL.Vec(TeamNote)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getExpense' : IDL.Func([IDL.Nat], [Expense], ['query']),
+  'getExpensesByDateRange' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Vec(Expense)],
+      ['query'],
+    ),
   'getMenuItem' : IDL.Func([IDL.Nat], [MenuItem], ['query']),
+  'getRevenueByDateRange' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Vec(RevenueEntry)],
+      ['query'],
+    ),
+  'getRevenueEntry' : IDL.Func([IDL.Nat], [RevenueEntry], ['query']),
   'getSalesGoal' : IDL.Func([IDL.Nat], [SalesGoal], ['query']),
   'getTask' : IDL.Func([IDL.Nat], [Task], ['query']),
   'getTeamNote' : IDL.Func([IDL.Nat], [TeamNote], ['query']),
@@ -102,7 +210,9 @@ export const idlService = IDL.Service({
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'updateExpense' : IDL.Func([Expense], [Expense], []),
   'updateMenuItem' : IDL.Func([MenuItem], [MenuItem], []),
+  'updateRevenueEntry' : IDL.Func([RevenueEntry], [RevenueEntry], []),
   'updateSalesGoal' : IDL.Func([SalesGoal], [SalesGoal], []),
   'updateTask' : IDL.Func([Task], [Task], []),
   'updateTeamNote' : IDL.Func([TeamNote], [TeamNote], []),
@@ -111,10 +221,59 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const _CaffeineStorageCreateCertificateResult = IDL.Record({
+    'method' : IDL.Text,
+    'blob_hash' : IDL.Text,
+  });
+  const _CaffeineStorageRefillInformation = IDL.Record({
+    'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const _CaffeineStorageRefillResult = IDL.Record({
+    'success' : IDL.Opt(IDL.Bool),
+    'topped_up_amount' : IDL.Opt(IDL.Nat),
+  });
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
+  });
+  const ChatMessage = IDL.Record({
+    'id' : IDL.Nat,
+    'attachmentUrl' : IDL.Opt(IDL.Text),
+    'body' : IDL.Text,
+    'tags' : IDL.Vec(IDL.Text),
+    'authorName' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'attachmentName' : IDL.Opt(IDL.Text),
+  });
+  const PaymentStatus = IDL.Variant({
+    'paid' : IDL.Null,
+    'payable' : IDL.Null,
+  });
+  const ExpenseCategory = IDL.Variant({
+    'cleaning' : IDL.Null,
+    'equipment' : IDL.Null,
+    'marketing' : IDL.Null,
+    'supplies' : IDL.Null,
+    'custom' : IDL.Null,
+    'rent' : IDL.Null,
+    'utilities' : IDL.Null,
+    'labor' : IDL.Null,
+    'website' : IDL.Null,
+    'legal' : IDL.Null,
+    'licensing' : IDL.Null,
+  });
+  const Expense = IDL.Record({
+    'id' : IDL.Nat,
+    'attachmentUrl' : IDL.Opt(IDL.Text),
+    'paymentStatus' : PaymentStatus,
+    'date' : IDL.Text,
+    'createdBy' : IDL.Text,
+    'description' : IDL.Text,
+    'notes' : IDL.Text,
+    'category' : ExpenseCategory,
+    'attachmentName' : IDL.Opt(IDL.Text),
+    'amount' : IDL.Float64,
   });
   const MenuCategory = IDL.Variant({
     'coldDrinks' : IDL.Null,
@@ -129,6 +288,14 @@ export const idlFactory = ({ IDL }) => {
     'available' : IDL.Bool,
     'category' : MenuCategory,
     'price' : IDL.Float64,
+  });
+  const RevenueEntry = IDL.Record({
+    'id' : IDL.Nat,
+    'source' : IDL.Text,
+    'date' : IDL.Text,
+    'createdBy' : IDL.Text,
+    'notes' : IDL.Text,
+    'totalRevenue' : IDL.Float64,
   });
   const GoalPeriod = IDL.Variant({
     'monthly' : IDL.Null,
@@ -178,23 +345,74 @@ export const idlFactory = ({ IDL }) => {
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
   
   return IDL.Service({
+    '_caffeineStorageBlobIsLive' : IDL.Func(
+        [IDL.Vec(IDL.Nat8)],
+        [IDL.Bool],
+        ['query'],
+      ),
+    '_caffeineStorageBlobsToDelete' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        ['query'],
+      ),
+    '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        [],
+        [],
+      ),
+    '_caffeineStorageCreateCertificate' : IDL.Func(
+        [IDL.Text],
+        [_CaffeineStorageCreateCertificateResult],
+        [],
+      ),
+    '_caffeineStorageRefillCashier' : IDL.Func(
+        [IDL.Opt(_CaffeineStorageRefillInformation)],
+        [_CaffeineStorageRefillResult],
+        [],
+      ),
+    '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'createChatMessage' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [ChatMessage],
+        [],
+      ),
+    'createExpense' : IDL.Func([Expense], [Expense], []),
     'createMenuItem' : IDL.Func([MenuItem], [MenuItem], []),
+    'createRevenueEntry' : IDL.Func([RevenueEntry], [RevenueEntry], []),
     'createSalesGoal' : IDL.Func([SalesGoal], [SalesGoal], []),
     'createTask' : IDL.Func([Task], [Task], []),
     'createTeamNote' : IDL.Func([TeamNote], [TeamNote], []),
+    'deleteChatMessage' : IDL.Func([IDL.Nat], [], []),
+    'deleteExpense' : IDL.Func([IDL.Nat], [], []),
     'deleteMenuItem' : IDL.Func([IDL.Nat], [], []),
+    'deleteRevenueEntry' : IDL.Func([IDL.Nat], [], []),
     'deleteSalesGoal' : IDL.Func([IDL.Nat], [], []),
     'deleteTask' : IDL.Func([IDL.Nat], [], []),
     'deleteTeamNote' : IDL.Func([IDL.Nat], [], []),
+    'getAllChatMessages' : IDL.Func([], [IDL.Vec(ChatMessage)], ['query']),
+    'getAllExpenses' : IDL.Func([], [IDL.Vec(Expense)], ['query']),
     'getAllMenuItems' : IDL.Func([], [IDL.Vec(MenuItem)], ['query']),
+    'getAllRevenueEntries' : IDL.Func([], [IDL.Vec(RevenueEntry)], ['query']),
     'getAllSalesGoals' : IDL.Func([], [IDL.Vec(SalesGoal)], ['query']),
     'getAllTasks' : IDL.Func([], [IDL.Vec(Task)], ['query']),
     'getAllTeamNotes' : IDL.Func([], [IDL.Vec(TeamNote)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getExpense' : IDL.Func([IDL.Nat], [Expense], ['query']),
+    'getExpensesByDateRange' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Vec(Expense)],
+        ['query'],
+      ),
     'getMenuItem' : IDL.Func([IDL.Nat], [MenuItem], ['query']),
+    'getRevenueByDateRange' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Vec(RevenueEntry)],
+        ['query'],
+      ),
+    'getRevenueEntry' : IDL.Func([IDL.Nat], [RevenueEntry], ['query']),
     'getSalesGoal' : IDL.Func([IDL.Nat], [SalesGoal], ['query']),
     'getTask' : IDL.Func([IDL.Nat], [Task], ['query']),
     'getTeamNote' : IDL.Func([IDL.Nat], [TeamNote], ['query']),
@@ -205,7 +423,9 @@ export const idlFactory = ({ IDL }) => {
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'updateExpense' : IDL.Func([Expense], [Expense], []),
     'updateMenuItem' : IDL.Func([MenuItem], [MenuItem], []),
+    'updateRevenueEntry' : IDL.Func([RevenueEntry], [RevenueEntry], []),
     'updateSalesGoal' : IDL.Func([SalesGoal], [SalesGoal], []),
     'updateTask' : IDL.Func([Task], [Task], []),
     'updateTeamNote' : IDL.Func([TeamNote], [TeamNote], []),
