@@ -37,6 +37,7 @@ import {
   useUpdateExpense,
   useUpdateRevenueEntry,
 } from "@/hooks/useQueries";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   CheckCircle2,
@@ -2221,6 +2222,7 @@ export default function PnL() {
   const [togglingId, setTogglingId] = useState<bigint | null>(null);
   const [dropzoneOver, setDropzoneOver] = useState(false);
   const inlineFileRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const { data: allExpenses = [], isLoading: expensesLoading } =
     useGetAllExpenses();
@@ -2816,6 +2818,11 @@ export default function PnL() {
           if (importedDates.every((d) => d < REOPENING_DATE)) {
             setPhase("preopening");
           }
+          // Force immediate refetch of revenue and expenses so new entries appear right away
+          queryClient.invalidateQueries({ queryKey: ["revenueEntries"] });
+          queryClient.invalidateQueries({ queryKey: ["expenses"] });
+          queryClient.refetchQueries({ queryKey: ["revenueEntries"] });
+          queryClient.refetchQueries({ queryKey: ["expenses"] });
         }}
       />
     </div>

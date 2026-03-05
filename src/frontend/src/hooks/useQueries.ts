@@ -394,6 +394,12 @@ export function useGetAllRevenueEntries() {
       return actor.getAllRevenueEntries();
     },
     enabled: !!actor && !isFetching,
+    // Always show empty array while waiting; refetch every 5s to catch
+    // entries written by other mutations (Square import, manual add, etc.)
+    // Stop once at least one real entry is confirmed.
+    refetchInterval: 5000,
+    // Keep data fresh across tab focus
+    staleTime: 0,
   });
 }
 
