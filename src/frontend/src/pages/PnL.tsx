@@ -91,12 +91,61 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
     "bg-neutral-100 text-neutral-600 border-neutral-200",
 };
 
+// Sales Tax and Tips are stored as "custom" but get distinct display labels/colors
+// based on a [Tag] prefix in the description written at import time.
+function getExpenseDisplayCategory(expense: {
+  category: ExpenseCategory;
+  description: string;
+}): { label: string; colorClass: string } {
+  if (expense.category === ExpenseCategory.custom) {
+    if (expense.description.startsWith("[Sales Tax]")) {
+      return {
+        label: "Sales Tax",
+        colorClass: "bg-rose-50 text-rose-700 border-rose-200",
+      };
+    }
+    if (expense.description.startsWith("[Tips]")) {
+      return {
+        label: "Tips",
+        colorClass: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200",
+      };
+    }
+  }
+  const found = EXPENSE_CATEGORIES.find((c) => c.value === expense.category);
+  return {
+    label: found?.label ?? expense.category,
+    colorClass: CATEGORY_COLORS[expense.category],
+  };
+}
+
+// Strip internal [Tag] prefix from description for display
+function displayDescription(description: string): string {
+  return description.replace(/^\[[\w\s]+\]\s*/, "");
+}
+
 const PAYMENT_STATUS_COLORS: Record<PaymentStatus, string> = {
   [PaymentStatus.paid]: "bg-emerald-50 text-emerald-700 border-emerald-200",
   [PaymentStatus.payable]: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
 // ─── Square Import Types & Parsers ────────────────────────────────────────────
+
+// Square PDFs often have text tokens without spaces — fix common patterns
+function preprocessSquareText(raw: string): string {
+  return (
+    raw
+      .replace(/\bGrossSales\b/g, "Gross Sales")
+      .replace(/\bNetSales\b/g, "Net Sales")
+      .replace(/\bTotalCollected\b/g, "Total Collected")
+      .replace(/\bTotalSales\b/g, "Total Sales")
+      .replace(/\bSalesTax\b/g, "Sales Tax")
+      .replace(/\bTotalTax\b/g, "Total Tax")
+      // Fix lines where amount is jammed onto the label: "Total Sales$28.90"
+      .replace(/([A-Za-z])(\$)/g, "$1 $2")
+      // Fix "28.90Taxes" style jams
+      .replace(/(\d)([A-Z])/g, "$1 $2")
+  );
+}
 
 interface SalesMixItem {
   item: string;
@@ -387,8 +436,11 @@ async function extractPdfText(file: File): Promise<string> {
 }
 
 // Extract structured sales data from unstructured PDF text using multiple strategies
-function parseSquarePDFText(text: string): ParsedSalesDay[] {
-  // ── Pre-process: split text into lines, also keep the raw text for scanning ──
+function parseSquarePDFText(rawText: string): ParsedSalesDay[] {
+  // ── Pre-process: fix common Square PDF jammed-text issues ──
+  const text = preprocessSquareText(rawText);
+
+  // ── Split text into lines, also keep the processed text for scanning ──
   const lines = text
     .split(/\n/)
     .map((l) => l.trim())
@@ -405,6 +457,10 @@ function parseSquarePDFText(text: string): ParsedSalesDay[] {
   // Strategy 3: Look for known Square summary keywords anywhere in the text
   const strategy3Results = parseSquarePDFStrategy3(text, lines);
   if (strategy3Results.length > 0) return strategy3Results;
+
+  // Strategy 5: Label on one line, value on next line (Square Dashboard format)
+  const strategy5Results = parseSquarePDFStrategy5(lines);
+  if (strategy5Results.length > 0) return strategy5Results;
 
   // Strategy 4: If any dollar amounts found, use today's date as fallback
   const strategy4Results = parseSquarePDFStrategy4(text);
@@ -693,6 +749,82 @@ function parseSquarePDFStrategy4(text: string): ParsedSalesDay[] {
   ];
 }
 
+// Strategy 5: Handle Square's "label on one line, value on next line" format
+// Covers Square Dashboard Close-of-Day and printed summary PDFs
+function parseSquarePDFStrategy5(lines: string[]): ParsedSalesDay[] {
+  const fieldMap: Record<string, string> = {};
+  let date: string | null = null;
+
+  const labelKeywords: Record<string, string> = {
+    "gross sales": "gross sales",
+    "net sales": "net sales",
+    "total collected": "total collected",
+    "total sales": "total sales",
+    discounts: "discounts",
+    taxes: "taxes",
+    tax: "taxes",
+    tips: "tips",
+    refunds: "refunds",
+    gross: "gross sales",
+    net: "net sales",
+    total: "total collected",
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim().toLowerCase();
+    const nextLine = lines[i + 1]?.trim() ?? "";
+
+    // Try to detect date (first occurrence)
+    if (!date) {
+      const parsed = parseDate(lines[i]);
+      if (parsed) date = parsed;
+      // Also try "Mar 20 - Mar 21, 2026" range style — use first date
+      const rangeMatch = lines[i].match(/([A-Za-z]{3,9}\s+\d{1,2})\s*[-–]\s*/);
+      if (rangeMatch) {
+        const d = parseDate(`${rangeMatch[1]}, ${new Date().getFullYear()}`);
+        if (d) date = d;
+      }
+    }
+
+    // Check if this line is a known label
+    const matchedKey = Object.keys(labelKeywords).find(
+      (k) => line === k || line.includes(k),
+    );
+    if (matchedKey) {
+      // Check if next line is a dollar amount (possibly negative)
+      const amountMatch = nextLine.match(/^-?\$?\s*([\d,]+\.?\d{0,2})$/);
+      if (amountMatch) {
+        fieldMap[labelKeywords[matchedKey]] = amountMatch[1].replace(/,/g, "");
+        i++; // skip the value line
+        continue;
+      }
+    }
+
+    // Also handle "Label: $value" or "Label $value" on a single line
+    const inlineMatch = lines[i].match(
+      /^([A-Za-z\s]+?)\s*:?\s*-?\$\s*([\d,]+\.?\d{0,2})$/,
+    );
+    if (inlineMatch) {
+      const key = normHeader(inlineMatch[1]);
+      const matchedInline = Object.keys(labelKeywords).find(
+        (k) => key === k || key.includes(k),
+      );
+      if (matchedInline) {
+        fieldMap[labelKeywords[matchedInline]] = inlineMatch[2].replace(
+          /,/g,
+          "",
+        );
+      }
+    }
+  }
+
+  if (Object.keys(fieldMap).length === 0) return [];
+  if (!date) date = new Date().toISOString().split("T")[0];
+
+  const entry = buildParsedDay(date, fieldMap, [], "Square PDF Import");
+  return entry ? [entry] : [];
+}
+
 function buildParsedDay(
   date: string,
   fieldMap: Record<string, string>,
@@ -736,6 +868,7 @@ function buildParsedDay(
 type ImportDialogState =
   | { step: "idle" }
   | { step: "parsing" }
+  | { step: "paste" }
   | { step: "preview"; days: ParsedSalesDay[] }
   | { step: "importing"; days: ParsedSalesDay[]; progress: number }
   | { step: "done"; count: number }
@@ -745,17 +878,21 @@ interface SquareImportDialogProps {
   open: boolean;
   onClose: () => void;
   onManualEntry?: () => void;
+  onImportComplete?: (importedDates: string[]) => void;
 }
 
 function SquareImportDialog({
   open,
   onClose,
   onManualEntry,
+  onImportComplete,
 }: SquareImportDialogProps) {
   const userName = localStorage.getItem(STORAGE_KEY) ?? "Team";
   const createRevenue = useCreateRevenueEntry();
+  const createExpense = useCreateExpense();
   const [state, setState] = useState<ImportDialogState>({ step: "idle" });
   const [isDragOver, setIsDragOver] = useState(false);
+  const [pastedText, setPastedText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset state when dialog opens/closes
@@ -763,52 +900,76 @@ function SquareImportDialog({
     if (!open) {
       setState({ step: "idle" });
       setIsDragOver(false);
+      setPastedText("");
     }
   }, [open]);
 
-  const processFile = useCallback(async (file: File) => {
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "csv" && ext !== "pdf") {
-      setState({
-        step: "error",
-        message: "Only .csv and .pdf files are supported.",
-      });
+  const PARSE_ERROR_MSG =
+    "We had trouble reading that PDF automatically. You can paste the text from your Square report, try a CSV export from Square Dashboard, or add the revenue manually.";
+
+  const runParsedText = useCallback((text: string, source: "pdf" | "paste") => {
+    const days =
+      source === "pdf" ? parseSquarePDFText(text) : parseSquarePDFText(text);
+    if (days.length === 0) {
+      setState({ step: "error", message: PARSE_ERROR_MSG });
       return;
     }
+    setState({ step: "preview", days });
+  }, []);
 
-    setState({ step: "parsing" });
-
-    try {
-      let days: ParsedSalesDay[] = [];
-
-      if (ext === "csv") {
-        const text = await file.text();
-        days = parseSquareCSV(text);
-      } else {
-        // PDF
-        const text = await extractPdfText(file);
-        days = parseSquarePDFText(text);
-      }
-
-      if (days.length === 0) {
+  const processFile = useCallback(
+    async (file: File) => {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (ext !== "csv" && ext !== "pdf") {
         setState({
           step: "error",
-          message:
-            "We couldn't automatically read this PDF. Square PDFs can vary in format. You can add this entry manually using the Add Revenue button, or try exporting as a CSV from Square Dashboard for automatic import.",
+          message: "Only .csv and .pdf files are supported.",
         });
         return;
       }
 
-      setState({ step: "preview", days });
+      setState({ step: "parsing" });
+
+      try {
+        if (ext === "csv") {
+          const text = await file.text();
+          const days = parseSquareCSV(text);
+          if (days.length === 0) {
+            setState({ step: "error", message: PARSE_ERROR_MSG });
+            return;
+          }
+          setState({ step: "preview", days });
+        } else {
+          // PDF — attempt CDN pdf.js extraction with robust fallback
+          let pdfText = "";
+          try {
+            pdfText = await extractPdfText(file);
+          } catch (pdfErr) {
+            console.warn("pdf.js extraction failed, falling back:", pdfErr);
+            // CDN load failure — send user to paste fallback immediately
+            setState({ step: "paste" });
+            return;
+          }
+          runParsedText(pdfText, "pdf");
+        }
+      } catch (err) {
+        console.error("Square import parse error:", err);
+        setState({ step: "error", message: PARSE_ERROR_MSG });
+      }
+    },
+    [runParsedText],
+  );
+
+  const handleParsePaste = useCallback(() => {
+    if (!pastedText.trim()) return;
+    setState({ step: "parsing" });
+    try {
+      runParsedText(pastedText, "paste");
     } catch (err) {
-      console.error("Square import parse error:", err);
-      setState({
-        step: "error",
-        message:
-          "We couldn't automatically read this PDF. Square PDFs can vary in format. You can add this entry manually using the Add Revenue button, or try exporting as a CSV from Square Dashboard for automatic import.",
-      });
+      console.error("Paste parse error:", err);
+      setState({ step: "error", message: PARSE_ERROR_MSG });
     }
-  }, []);
+  }, [pastedText, runParsedText]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -836,46 +997,173 @@ function SquareImportDialog({
     const { days } = state;
     setState({ step: "importing", days, progress: 0 });
 
-    let imported = 0;
-    for (const day of days) {
-      const revenue =
-        day.totalCollected > 0 ? day.totalCollected : day.netSales;
-      const notesParts: string[] = [];
-      if (day.salesMix.length > 0) {
-        notesParts.push(
-          day.salesMix.map((s) => `${s.item} x${s.quantity}`).join(", "),
-        );
-      }
-      if (day.discounts > 0)
-        notesParts.push(`Discounts: ${formatCurrency(day.discounts)}`);
-      if (day.refunds > 0)
-        notesParts.push(`Refunds: ${formatCurrency(day.refunds)}`);
-      if (day.tips > 0) notesParts.push(`Tips: ${formatCurrency(day.tips)}`);
+    // Build a flat list of entries to create: up to 3 per day (Net Sales, Tax, Tips)
+    type PendingEntry = {
+      date: string;
+      source: string;
+      totalRevenue: number;
+      notes: string;
+    };
+    type PendingPayable = {
+      date: string;
+      amount: number;
+      description: string;
+      category: ExpenseCategory;
+      notes: string;
+    };
+    const entries: PendingEntry[] = [];
+    const payableEntries: PendingPayable[] = [];
 
+    for (const day of days) {
+      const netSales =
+        day.netSales > 0
+          ? day.netSales
+          : day.grossSales > 0
+            ? day.grossSales - day.discounts
+            : day.totalCollected > 0
+              ? day.totalCollected - day.taxes - day.tips
+              : 0;
+
+      // Sales mix note
+      const mixNote =
+        day.salesMix.length > 0
+          ? day.salesMix.map((s) => `${s.item} ×${s.quantity}`).join(", ")
+          : "";
+
+      // 1. Net Sales entry (always, if > 0)
+      if (netSales > 0) {
+        const noteParts = [mixNote];
+        if (day.discounts > 0)
+          noteParts.push(`Discounts: ${formatCurrency(day.discounts)}`);
+        if (day.refunds > 0)
+          noteParts.push(`Refunds: ${formatCurrency(day.refunds)}`);
+        entries.push({
+          date: day.date,
+          source: "Square — Net Sales",
+          totalRevenue: netSales,
+          notes: noteParts.filter(Boolean).join(" | "),
+        });
+      }
+
+      // 2. Tax entry (if > 0)
+      if (day.taxes > 0) {
+        entries.push({
+          date: day.date,
+          source: "Square — Tax Collected",
+          totalRevenue: day.taxes,
+          notes: "",
+        });
+      }
+
+      // 3. Tips entry (if > 0)
+      if (day.tips > 0) {
+        entries.push({
+          date: day.date,
+          source: "Square — Tips",
+          totalRevenue: day.tips,
+          notes: "",
+        });
+      }
+
+      // Auto-create payable expense entries for tax and tips
+      if (day.taxes > 0) {
+        payableEntries.push({
+          date: day.date,
+          amount: day.taxes,
+          description: `[Sales Tax] Sales Tax Payable — Square ${formatDate(day.date)}`,
+          category: ExpenseCategory.custom,
+          notes: "Auto-created from Square import",
+        });
+      }
+      if (day.tips > 0) {
+        payableEntries.push({
+          date: day.date,
+          amount: day.tips,
+          description: `[Tips] Tips Payable — Square ${formatDate(day.date)}`,
+          category: ExpenseCategory.custom,
+          notes: "Auto-created from Square import",
+        });
+      }
+
+      // Fallback: if nothing above had values, use totalCollected as a single entry
+      if (
+        netSales === 0 &&
+        day.taxes === 0 &&
+        day.tips === 0 &&
+        day.totalCollected > 0
+      ) {
+        entries.push({
+          date: day.date,
+          source: "Square Import",
+          totalRevenue: day.totalCollected,
+          notes: mixNote,
+        });
+      }
+    }
+
+    const totalOps = entries.length + payableEntries.length;
+    let imported = 0;
+    for (const entry of entries) {
       try {
         await createRevenue.mutateAsync({
           id: BigInt(0),
-          date: day.date,
-          totalRevenue: revenue,
-          source: "Square Import",
-          notes: notesParts.join(" | "),
+          date: entry.date,
+          totalRevenue: entry.totalRevenue,
+          source: entry.source,
+          notes: entry.notes,
           createdBy: userName,
         });
         imported++;
         setState({
           step: "importing",
           days,
-          progress: Math.round((imported / days.length) * 100),
+          progress: Math.round((imported / totalOps) * 100),
         });
       } catch {
         // Continue on individual failure
       }
     }
 
-    setState({ step: "done", count: imported });
+    // Create payable expense entries for tax and tips
+    for (const pe of payableEntries) {
+      try {
+        await createExpense.mutateAsync({
+          id: BigInt(0),
+          description: pe.description,
+          amount: pe.amount,
+          category: pe.category,
+          date: pe.date,
+          notes: pe.notes,
+          createdBy: userName,
+          paymentStatus: PaymentStatus.payable,
+          attachmentUrl: undefined,
+          attachmentName: undefined,
+        });
+        imported++;
+        setState({
+          step: "importing",
+          days,
+          progress: Math.round((imported / totalOps) * 100),
+        });
+      } catch {
+        // Continue on individual failure
+      }
+    }
+
+    const revenueCount = entries.length;
+    const payableCount = payableEntries.length;
+    setState({ step: "done", count: revenueCount });
+    const payableMsg =
+      payableCount > 0
+        ? ` + ${payableCount} payable ${payableCount === 1 ? "entry" : "entries"} added to Expenses`
+        : "";
     toast.success(
-      `${imported} revenue ${imported === 1 ? "entry" : "entries"} added from Square export`,
+      `${revenueCount} revenue ${revenueCount === 1 ? "line" : "lines"} added from Square export${payableMsg}`,
     );
+    // Notify parent with the dates so it can adjust the period filter
+    if (onImportComplete) {
+      onImportComplete(days.map((d) => d.date));
+    }
   };
 
   const handleClose = () => {
@@ -1099,6 +1387,71 @@ function SquareImportDialog({
           </div>
         )}
 
+        {/* ── PASTE TEXT FALLBACK ── */}
+        {state.step === "paste" && (
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <p className="text-sm font-light text-foreground">
+                Couldn't read the PDF automatically.
+              </p>
+              <p className="text-xs text-muted-foreground font-light leading-relaxed">
+                Open your Square PDF in a browser or Preview, press{" "}
+                <kbd className="px-1 py-0.5 text-[10px] border border-border bg-muted rounded font-mono">
+                  Cmd+A
+                </kbd>{" "}
+                to select all,{" "}
+                <kbd className="px-1 py-0.5 text-[10px] border border-border bg-muted rounded font-mono">
+                  Cmd+C
+                </kbd>{" "}
+                to copy, then paste below.
+              </p>
+            </div>
+            <Textarea
+              data-ocid="pnl.import_paste_textarea"
+              value={pastedText}
+              onChange={(e) => setPastedText(e.target.value)}
+              placeholder="Open your Square PDF, select all text (Cmd+A), copy, and paste here..."
+              rows={8}
+              className="font-mono text-xs resize-none"
+              autoFocus
+            />
+            <DialogFooter className="gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPastedText("");
+                  setState({ step: "idle" });
+                }}
+              >
+                Back
+              </Button>
+              {onManualEntry && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-ocid="pnl.import_manual_entry_button"
+                  onClick={() => {
+                    handleClose();
+                    onManualEntry();
+                  }}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add Manually
+                </Button>
+              )}
+              <Button
+                size="sm"
+                data-ocid="pnl.import_parse_paste_button"
+                disabled={!pastedText.trim()}
+                onClick={handleParsePaste}
+              >
+                Parse Text
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
         {/* ── ERROR ── */}
         {state.step === "error" && (
           <div
@@ -1131,6 +1484,17 @@ function SquareImportDialog({
                 }}
               >
                 Try Different File
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                data-ocid="pnl.import_paste_text_button"
+                onClick={() => {
+                  setPastedText("");
+                  setState({ step: "paste" });
+                }}
+              >
+                Paste Text Instead
               </Button>
               {onManualEntry && (
                 <Button
@@ -1747,12 +2111,25 @@ function SummaryCard({
 // ─── Category Breakdown ───────────────────────────────────────────────────────
 
 function CategoryBreakdown({ expenses }: { expenses: Expense[] }) {
-  const byCategory = EXPENSE_CATEGORIES.map(({ value, label }) => {
-    const total = expenses
-      .filter((e) => e.category === value)
-      .reduce((sum, e) => sum + e.amount, 0);
-    return { value, label, total };
-  }).filter((c) => c.total > 0);
+  // Build dynamic category map — includes Sales Tax and Tips as distinct rows
+  const categoryMap = new Map<
+    string,
+    { label: string; colorClass: string; total: number }
+  >();
+
+  for (const expense of expenses) {
+    const { label, colorClass } = getExpenseDisplayCategory(expense);
+    const existing = categoryMap.get(label);
+    if (existing) {
+      existing.total += expense.amount;
+    } else {
+      categoryMap.set(label, { label, colorClass, total: expense.amount });
+    }
+  }
+
+  const byCategory = Array.from(categoryMap.values()).sort(
+    (a, b) => b.total - a.total,
+  );
 
   if (byCategory.length === 0) return null;
 
@@ -1763,10 +2140,10 @@ function CategoryBreakdown({ expenses }: { expenses: Expense[] }) {
       <p className="label-caps mb-3">By Category</p>
       <div className="space-y-2">
         {byCategory.map((c) => (
-          <div key={c.value} className="flex items-center gap-3">
+          <div key={c.label} className="flex items-center gap-3">
             <Badge
               variant="outline"
-              className={`text-[10px] uppercase tracking-wider font-medium shrink-0 ${CATEGORY_COLORS[c.value]}`}
+              className={`text-[10px] uppercase tracking-wider font-medium shrink-0 ${c.colorClass}`}
             >
               {c.label}
             </Badge>
@@ -2182,7 +2559,7 @@ export default function PnL() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-light text-foreground truncate">
-                        {expense.description}
+                        {displayDescription(expense.description)}
                       </p>
                       {expense.notes && (
                         <p className="text-xs text-muted-foreground/70 font-light truncate mt-0.5">
@@ -2192,12 +2569,18 @@ export default function PnL() {
                     </div>
 
                     {/* Category badge */}
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] uppercase tracking-wider font-medium shrink-0 hidden sm:inline-flex ${CATEGORY_COLORS[expense.category]}`}
-                    >
-                      {expense.category}
-                    </Badge>
+                    {(() => {
+                      const { label, colorClass } =
+                        getExpenseDisplayCategory(expense);
+                      return (
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] uppercase tracking-wider font-medium shrink-0 hidden sm:inline-flex ${colorClass}`}
+                        >
+                          {label}
+                        </Badge>
+                      );
+                    })()}
 
                     {/* Payment status badge (always visible, clickable to toggle) */}
                     <PaymentStatusBadge
@@ -2424,6 +2807,15 @@ export default function PnL() {
           setImportDialogOpen(false);
           setEditingRevenue(null);
           setRevenueDialogOpen(true);
+        }}
+        onImportComplete={(importedDates) => {
+          // Switch to annual view so all imported entries are visible regardless of date
+          setPeriod("annual");
+          setPhase("all");
+          // If all dates are pre-opening, switch to pre-opening phase
+          if (importedDates.every((d) => d < REOPENING_DATE)) {
+            setPhase("preopening");
+          }
         }}
       />
     </div>

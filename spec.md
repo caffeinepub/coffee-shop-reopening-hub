@@ -1,38 +1,30 @@
 # Coffee Shop Reopening Hub
 
 ## Current State
-- The app is labeled "Reopening Manager" in the sidebar, login page, WhoAreYou screen, and dashboard heading.
-- Task categories are hardcoded as a TypeScript enum (`TaskCategory`) with five fixed values: equipment, staffing, marketing, cleaning, permits. Users cannot add or remove categories.
-- Unit conversion for ingredients/recipes was just added (already complete).
+
+Full-stack ops platform with Tasks, Menu, Inventory (recipes + count sheets), Financials (P&L with expenses and revenue), and Team Chat. The Financials page supports Square sales file imports (PDF/CSV) which create up to 3 revenue line items per day: Net Sales, Tax Collected, and Tips. ExpenseCategory currently has: rent, utilities, labor, supplies, marketing, website, equipment, licensing, cleaning, legal, custom.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Custom task category management**: A "Manage Categories" button on the Tasks page that opens a dialog where users can add new custom categories (free-text) and remove existing ones. Custom categories are stored in `localStorage` so they persist across sessions without requiring backend changes. The category select in the Add/Edit Task dialog and the filter dropdown must reflect the full list (built-in + custom).
+- `#sales_tax` variant to `ExpenseCategory` in the backend
+- `#tips` variant to `ExpenseCategory` in the backend
+- Auto-creation of a `Sales Tax Payable` expense entry (category: `sales_tax`, paymentStatus: `payable`) whenever a Square import includes a tax amount > 0
+- Auto-creation of a `Tips Payable` expense entry (category: `tips`, paymentStatus: `payable`) whenever a Square import includes a tips amount > 0
 
 ### Modify
-- **Rename "Reopening Manager" to "Pop-Up Manager"** everywhere it appears:
-  - `App.tsx`: sidebar wordmark subtitle and WhoAreYou screen subtitle
-  - `Login.tsx`: left panel subtitle, mobile wordmark subtitle, and sign-in description text
-  - `Dashboard.tsx`: page heading "Reopening Status" → "Pop-Up Status"
-- **Tasks.tsx**: 
-  - Add a "Manage Categories" button near the filter area (small, secondary style)
-  - Add a category management dialog: shows list of all categories with delete buttons (cannot delete built-in ones), plus an input + add button to create new ones
-  - Custom categories are stored in `localStorage` under key `alldaymia_custom_categories` as a JSON array of strings
-  - The category filter dropdown and the task form category select both include custom categories
-  - Tasks that have a custom category string show that string as their label (fallback for unknown enum values)
+- `ExpenseCategory` enum in `main.mo` to include `#sales_tax` and `#tips`
+- `backend.d.ts` (auto-generated) to include `sales_tax` and `tips` in the enum
+- `PnL.tsx`: in `handleConfirmImport`, after creating revenue entries for tax and tips, also call `createExpense` for each day's tax and tips amounts with the appropriate new categories and `PaymentStatus.payable`
+- `PnL.tsx`: add `sales_tax` and `tips` to `EXPENSE_CATEGORIES` list and `CATEGORY_COLORS` map
 
 ### Remove
-- Nothing removed.
+- Nothing
 
 ## Implementation Plan
-1. In `App.tsx`: replace all 2 instances of "Reopening Manager" with "Pop-Up Manager".
-2. In `Login.tsx`: replace "Reopening Manager" (×2) and "Your reopening, organized." and "Access your reopening dashboard..." with Pop-Up equivalents.
-3. In `Dashboard.tsx`: replace "Reopening Status" with "Pop-Up Status".
-4. In `Tasks.tsx`:
-   - Add `useCustomCategories` hook-like logic (useState + localStorage init) that merges built-in `categoryLabels` with custom categories.
-   - Add "Manage Categories" secondary button in the filter row header area.
-   - Add a `CategoryManagerDialog` component: lists all built-in + custom categories, built-ins show a lock icon (no delete), custom ones show a trash button. Has an input + "Add" button. Saves to localStorage on every change.
-   - Update the category filter `<Select>` and the task form category `<Select>` to use the merged list.
-   - For display (badge in task list), fall back to the raw string if the category isn't in the built-in enum.
-5. Validate: typecheck, lint, build pass.
+
+1. Regenerate backend `main.mo` with `#sales_tax` and `#tips` added to `ExpenseCategory` — all other logic unchanged
+2. Update frontend `PnL.tsx`:
+   - Add `sales_tax` and `tips` entries to `EXPENSE_CATEGORIES` and `CATEGORY_COLORS`
+   - In `SquareImportDialog.handleConfirmImport`, after the tax revenue entry is created for a day, call `createExpense` with `{ category: ExpenseCategory.sales_tax, paymentStatus: PaymentStatus.payable, amount: day.taxes, description: "Sales Tax Payable — Square [date]", date: day.date, ... }`
+   - Similarly for tips: `{ category: ExpenseCategory.tips, paymentStatus: PaymentStatus.payable, amount: day.tips, description: "Tips Payable — Square [date]", date: day.date, ... }`
