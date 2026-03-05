@@ -34,7 +34,15 @@ import {
   useGetAllTasks,
   useUpdateTask,
 } from "@/hooks/useQueries";
-import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronRight,
+  Lock,
+  Pencil,
+  Plus,
+  Settings2,
+  Trash2,
+  X,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 
@@ -87,13 +95,176 @@ const priorityBadgeClass: Record<TaskPriority, string> = {
 };
 
 // Muted category colors in ALL DAY palette
-const categoryStyle: Record<TaskCategory, string> = {
-  [TaskCategory.equipment]: "text-foreground/50 border-border",
-  [TaskCategory.staffing]: "text-foreground/50 border-border",
-  [TaskCategory.marketing]: "text-foreground/50 border-border",
-  [TaskCategory.cleaning]: "text-foreground/50 border-border",
-  [TaskCategory.permits]: "text-foreground/50 border-border",
-};
+const categoryStyle = "text-foreground/50 border-border";
+
+// ── Custom categories stored in localStorage ─────────────────────────────────
+const CUSTOM_CATS_KEY = "alldaymia_custom_categories";
+
+function loadCustomCategories(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_CATS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomCategories(cats: string[]) {
+  localStorage.setItem(CUSTOM_CATS_KEY, JSON.stringify(cats));
+}
+
+function toSlug(input: string): string {
+  return input.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function toLabel(slug: string): string {
+  return slug
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// ── Category Manager Dialog ───────────────────────────────────────────────────
+function CategoryManagerDialog({
+  open,
+  onOpenChange,
+  customCategories,
+  onAdd,
+  onRemove,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  customCategories: string[];
+  onAdd: (slug: string) => void;
+  onRemove: (slug: string) => void;
+}) {
+  const [newCatInput, setNewCatInput] = useState("");
+  const [error, setError] = useState("");
+
+  const builtInSlugs = Object.keys(categoryLabels) as TaskCategory[];
+
+  function handleAdd() {
+    const slug = toSlug(newCatInput);
+    if (!slug) {
+      setError("Please enter a category name.");
+      return;
+    }
+    const allSlugs = [...builtInSlugs, ...customCategories];
+    if (allSlugs.includes(slug)) {
+      setError("Category already exists.");
+      return;
+    }
+    onAdd(slug);
+    setNewCatInput("");
+    setError("");
+  }
+
+  function handleClose() {
+    setNewCatInput("");
+    setError("");
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent
+        data-ocid="tasks.manage_categories.dialog"
+        className="sm:max-w-sm rounded-none"
+      >
+        <DialogHeader>
+          <DialogTitle className="uppercase tracking-widest font-normal text-base">
+            Manage Categories
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-1 py-2">
+          {/* Built-in categories */}
+          {builtInSlugs.map((slug) => (
+            <div
+              key={slug}
+              className="flex items-center justify-between px-3 py-2 border border-border"
+            >
+              <span className="text-xs uppercase tracking-widest font-light text-foreground">
+                {categoryLabels[slug]}
+              </span>
+              <Lock className="w-3 h-3 text-muted-foreground/50" />
+            </div>
+          ))}
+
+          {/* Custom categories */}
+          {customCategories.map((slug, idx) => (
+            <div
+              key={slug}
+              className="flex items-center justify-between px-3 py-2 border border-border bg-muted/20"
+            >
+              <span className="text-xs uppercase tracking-widest font-light text-foreground">
+                {toLabel(slug)}
+              </span>
+              <button
+                type="button"
+                data-ocid={`tasks.category.delete_button.${idx + 1}`}
+                onClick={() => onRemove(slug)}
+                className="p-0.5 text-muted-foreground hover:text-brand-terracotta transition-colors"
+                title={`Remove ${toLabel(slug)}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+
+          {customCategories.length === 0 && (
+            <p className="text-xs text-muted-foreground font-light px-3 py-2 italic">
+              No custom categories yet.
+            </p>
+          )}
+        </div>
+
+        {/* Add new category */}
+        <div className="pt-3 border-t border-border space-y-2">
+          <Label className="label-caps">New Category</Label>
+          <div className="flex gap-2">
+            <Input
+              data-ocid="tasks.category_name.input"
+              value={newCatInput}
+              onChange={(e) => {
+                setNewCatInput(e.target.value);
+                setError("");
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+              placeholder="e.g. Vendors"
+              className="rounded-none border-border font-light text-sm flex-1"
+            />
+            <Button
+              data-ocid="tasks.category.add_button"
+              onClick={handleAdd}
+              className="rounded-none text-xs uppercase tracking-widest shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Add
+            </Button>
+          </div>
+          {error && (
+            <p className="text-xs text-brand-terracotta font-light">{error}</p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            data-ocid="tasks.manage_categories.close_button"
+            variant="outline"
+            onClick={handleClose}
+            className="rounded-none text-xs uppercase tracking-widest"
+          >
+            <X className="w-3.5 h-3.5 mr-1" />
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const EMPTY_FORM: Partial<Task> = {
   title: "",
@@ -124,10 +295,45 @@ export default function Tasks() {
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
 
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
-  const [filterCategory, setFilterCategory] = useState<TaskCategory | "all">(
-    "all",
+  // Custom categories state
+  const [customCategories, setCustomCategories] =
+    useState<string[]>(loadCustomCategories);
+  const [catManagerOpen, setCatManagerOpen] = useState(false);
+
+  // Build merged category entries: built-in + custom
+  const builtInCategoryEntries = Object.entries(categoryLabels) as [
+    TaskCategory,
+    string,
+  ][];
+  const customCategoryEntries: [string, string][] = customCategories.map(
+    (slug) => [slug, toLabel(slug)],
   );
+  const allCategoryEntries: [string, string][] = [
+    ...builtInCategoryEntries,
+    ...customCategoryEntries,
+  ];
+
+  function getCategoryLabel(cat: string): string {
+    if (cat in categoryLabels) return categoryLabels[cat as TaskCategory];
+    const match = customCategories.find((s) => s === cat);
+    if (match) return toLabel(match);
+    return toLabel(cat);
+  }
+
+  function handleAddCustomCategory(slug: string) {
+    const updated = [...customCategories, slug];
+    setCustomCategories(updated);
+    saveCustomCategories(updated);
+  }
+
+  function handleRemoveCustomCategory(slug: string) {
+    const updated = customCategories.filter((s) => s !== slug);
+    setCustomCategories(updated);
+    saveCustomCategories(updated);
+  }
+
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
+  const [filterCategory, setFilterCategory] = useState<string | "all">("all");
   const [filterAssignee, setFilterAssignee] = useState<FilterAssignee>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -211,8 +417,8 @@ export default function Tasks() {
 
       {/* Filters */}
       <div className="space-y-3 border-b border-border pb-6">
-        {/* Status pills */}
-        <div className="flex flex-wrap items-center gap-6">
+        {/* Status pills + category + manage */}
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex gap-0" data-ocid="tasks.filter.tab">
             {statusFilters.map(({ value, label }) => (
               <button
@@ -233,7 +439,7 @@ export default function Tasks() {
           {/* Category select */}
           <Select
             value={filterCategory}
-            onValueChange={(v) => setFilterCategory(v as TaskCategory | "all")}
+            onValueChange={(v) => setFilterCategory(v)}
           >
             <SelectTrigger className="w-[160px] h-8 text-xs uppercase tracking-widest border-border rounded-none bg-transparent">
               <SelectValue placeholder="All Categories" />
@@ -245,7 +451,7 @@ export default function Tasks() {
               >
                 All Categories
               </SelectItem>
-              {Object.entries(categoryLabels).map(([val, label]) => (
+              {allCategoryEntries.map(([val, label]) => (
                 <SelectItem
                   key={val}
                   value={val}
@@ -256,6 +462,17 @@ export default function Tasks() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Manage Categories button */}
+          <button
+            type="button"
+            data-ocid="tasks.manage_categories_button"
+            onClick={() => setCatManagerOpen(true)}
+            className="flex items-center gap-1.5 text-xs uppercase tracking-widest font-medium px-3 py-2 border border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-all duration-150 rounded-none"
+          >
+            <Settings2 className="w-3 h-3" />
+            Categories
+          </button>
 
           <p className="text-xs text-muted-foreground font-light ml-auto">
             {filtered.length} task{filtered.length !== 1 ? "s" : ""}
@@ -368,9 +585,9 @@ export default function Tasks() {
                   </p>
                   <div className="flex flex-wrap items-center gap-3 mt-1">
                     <span
-                      className={`text-xs uppercase tracking-widest font-light border px-1.5 py-0.5 ${categoryStyle[task.category]}`}
+                      className={`text-xs uppercase tracking-widest font-light border px-1.5 py-0.5 ${categoryStyle}`}
                     >
-                      {categoryLabels[task.category]}
+                      {getCategoryLabel(task.category)}
                     </span>
                     <span
                       className={`text-xs px-1.5 py-0.5 font-medium tracking-wide rounded-none ${priorityBadgeClass[task.priority]}`}
@@ -462,7 +679,7 @@ export default function Tasks() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-none">
-                    {Object.entries(categoryLabels).map(([val, label]) => (
+                    {allCategoryEntries.map(([val, label]) => (
                       <SelectItem key={val} value={val}>
                         {label}
                       </SelectItem>
@@ -595,6 +812,15 @@ export default function Tasks() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Category Manager Dialog */}
+      <CategoryManagerDialog
+        open={catManagerOpen}
+        onOpenChange={setCatManagerOpen}
+        customCategories={customCategories}
+        onAdd={handleAddCustomCategory}
+        onRemove={handleRemoveCustomCategory}
+      />
     </div>
   );
 }

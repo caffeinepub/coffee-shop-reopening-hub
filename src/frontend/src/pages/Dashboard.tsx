@@ -61,7 +61,7 @@ export default function Dashboard() {
       >
         <p className="label-caps mb-1">Overview</p>
         <h1 className="text-3xl font-normal uppercase tracking-widest text-foreground">
-          Reopening Status
+          Pop-Up Status
         </h1>
       </motion.div>
 

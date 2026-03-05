@@ -1,11 +1,19 @@
 import {
+  ExpenseCategory,
   GoalPeriod,
   MenuCategory,
+  PaymentStatus,
   TaskCategory,
   TaskPriority,
   TaskStatus,
 } from "../backend.d";
-import type { MenuItem, SalesGoal, Task, TeamNote } from "../backend.d";
+import type {
+  Expense,
+  MenuItem,
+  SalesGoal,
+  Task,
+  TeamNote,
+} from "../backend.d";
 
 export const SEED_TASKS: Omit<Task, "id">[] = [
   // Juan
@@ -407,3 +415,16 @@ export const SEED_SALES_GOALS: Omit<SalesGoal, "id">[] = [
 ];
 
 export const SEED_TEAM_NOTES: Omit<TeamNote, "id">[] = [];
+
+export const SEED_EXPENSES: Omit<Expense, "id">[] = [
+  {
+    description:
+      "Square Online Store subscription — alldayaway.com custom domain for AD online store",
+    amount: 28.9,
+    category: ExpenseCategory.website,
+    date: "2026-03-04",
+    notes: "Charged to CC ending in 3920. Recurring monthly.",
+    createdBy: "Camila",
+    paymentStatus: PaymentStatus.paid,
+  },
+];

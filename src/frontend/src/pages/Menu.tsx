@@ -1,5 +1,5 @@
 import { MenuCategory } from "@/backend.d";
-import type { MenuItem } from "@/backend.d";
+import type { Ingredient, MenuItem, Recipe } from "@/backend.d";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,10 +33,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   useCreateMenuItem,
   useDeleteMenuItem,
+  useGetAllIngredients,
   useGetAllMenuItems,
+  useGetAllRecipes,
   useUpdateMenuItem,
 } from "@/hooks/useQueries";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 
@@ -137,8 +139,94 @@ function isPreviewItem(id: bigint) {
   return id >= BigInt(1000);
 }
 
-export default function Menu() {
+// ── Recipe preview row ────────────────────────────────────────────────────────
+
+interface RecipePreviewProps {
+  menuItemId: bigint;
+  recipes: Recipe[];
+  ingredients: Ingredient[];
+  onEditRecipe: () => void;
+}
+
+function RecipePreview({
+  menuItemId,
+  recipes,
+  ingredients,
+  onEditRecipe,
+}: RecipePreviewProps) {
+  const recipe = recipes.find(
+    (r) => r.menuItemId.toString() === menuItemId.toString(),
+  );
+  const ingredientMap = useMemo(() => {
+    const map = new Map<string, Ingredient>();
+    for (const ing of ingredients) map.set(ing.id.toString(), ing);
+    return map;
+  }, [ingredients]);
+
+  if (!recipe) {
+    return (
+      <div className="px-3 pb-3 pl-[calc(2.5rem+20px)]">
+        <p className="text-xs text-muted-foreground/60 font-light italic">
+          No recipe yet
+        </p>
+      </div>
+    );
+  }
+
+  const totalCost = recipe.ingredients.reduce((sum, ri) => {
+    const ing = ingredientMap.get(ri.ingredientId.toString());
+    return sum + (ing ? ri.quantityUsed * ing.unitCost : 0);
+  }, 0);
+
+  return (
+    <div className="px-3 pb-4 pl-[calc(2.5rem+20px)] border-t border-border/40 bg-muted/20">
+      <div className="pt-3 space-y-1">
+        {recipe.ingredients.map((ri) => {
+          const ing = ingredientMap.get(ri.ingredientId.toString());
+          if (!ing) return null;
+          const subtotal = ri.quantityUsed * ing.unitCost;
+          return (
+            <div
+              key={ri.ingredientId.toString()}
+              className="flex items-center justify-between gap-4 text-xs"
+            >
+              <span className="text-muted-foreground font-light">
+                {ing.name} × {ri.quantityUsed} {ing.unit}
+              </span>
+              <span className="tabular-nums text-muted-foreground font-light shrink-0">
+                ${subtotal.toFixed(3)}
+              </span>
+            </div>
+          );
+        })}
+
+        <div className="flex items-center justify-between gap-4 pt-2 border-t border-border/40">
+          <span className="text-xs uppercase tracking-widest font-medium text-muted-foreground">
+            Cost per serving
+          </span>
+          <span className="text-xs tabular-nums font-medium text-foreground">
+            ${totalCost.toFixed(3)}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onEditRecipe}
+          className="mt-1 text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors font-medium"
+        >
+          Edit in Inventory →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function Menu({
+  onNavigateToInventory,
+}: { onNavigateToInventory?: () => void } = {}) {
   const { data: items, isLoading } = useGetAllMenuItems();
+  const { data: recipes = [] } = useGetAllRecipes();
+  const { data: ingredients = [] } = useGetAllIngredients();
   const isSyncing =
     !isLoading && items && items.length > 0 && isPreviewItem(items[0].id);
   const createItem = useCreateMenuItem();
@@ -149,6 +237,7 @@ export default function Menu() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<bigint | null>(null);
   const [form, setForm] = useState<Partial<MenuItem>>(EMPTY_FORM);
+  const [expandedRecipeId, setExpandedRecipeId] = useState<bigint | null>(null);
 
   const grouped = useMemo(() => {
     if (!items) return {} as Record<MenuCategory, MenuItem[]>;
@@ -318,6 +407,7 @@ export default function Menu() {
                             const { clean: cleanDesc } = stripSubcategoryTag(
                               item.description,
                             );
+                            const recipeExpanded = expandedRecipeId === item.id;
                             return (
                               <motion.div
                                 key={item.id.toString()}
@@ -326,67 +416,116 @@ export default function Menu() {
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
                                 transition={{ duration: 0.18 }}
-                                className="flex items-center gap-5 py-4 group"
+                                layout
                               >
-                                {/* Availability indicator */}
-                                <Switch
-                                  data-ocid={`menu.availability_toggle.${markerIdx}`}
-                                  checked={item.available}
-                                  onCheckedChange={() =>
-                                    !isPreviewItem(item.id) &&
-                                    toggleAvailability(item)
-                                  }
-                                  disabled={isPreviewItem(item.id)}
-                                  className="shrink-0 data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border disabled:opacity-40"
-                                />
+                                <div className="flex items-center gap-5 py-4 group">
+                                  {/* Availability indicator */}
+                                  <Switch
+                                    data-ocid={`menu.availability_toggle.${markerIdx}`}
+                                    checked={item.available}
+                                    onCheckedChange={() =>
+                                      !isPreviewItem(item.id) &&
+                                      toggleAvailability(item)
+                                    }
+                                    disabled={isPreviewItem(item.id)}
+                                    className="shrink-0 data-[state=checked]:bg-foreground data-[state=unchecked]:bg-border disabled:opacity-40"
+                                  />
 
-                                {/* Info */}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-3">
-                                    <p
-                                      className={`text-sm font-light tracking-wide ${!item.available ? "text-muted-foreground line-through" : "text-foreground"}`}
-                                    >
-                                      {item.name}
-                                    </p>
-                                    {!item.available && (
-                                      <span className="text-xs uppercase tracking-widest badge-high px-1.5 py-0.5 font-medium">
-                                        86'd
-                                      </span>
+                                  {/* Info */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-3">
+                                      <p
+                                        className={`text-sm font-light tracking-wide ${!item.available ? "text-muted-foreground line-through" : "text-foreground"}`}
+                                      >
+                                        {item.name}
+                                      </p>
+                                      {!item.available && (
+                                        <span className="text-xs uppercase tracking-widest badge-high px-1.5 py-0.5 font-medium">
+                                          86'd
+                                        </span>
+                                      )}
+                                    </div>
+                                    {cleanDesc && (
+                                      <p className="text-xs text-muted-foreground font-light mt-0.5 line-clamp-1 tracking-wide">
+                                        {cleanDesc}
+                                      </p>
                                     )}
                                   </div>
-                                  {cleanDesc && (
-                                    <p className="text-xs text-muted-foreground font-light mt-0.5 line-clamp-1 tracking-wide">
-                                      {cleanDesc}
+
+                                  {/* Price */}
+                                  {item.price > 0 && (
+                                    <p className="text-sm font-light tabular-nums text-foreground shrink-0">
+                                      ${item.price.toFixed(2)}
                                     </p>
+                                  )}
+
+                                  {/* Recipe toggle */}
+                                  {!isPreviewItem(item.id) && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedRecipeId(
+                                          recipeExpanded ? null : item.id,
+                                        )
+                                      }
+                                      className="shrink-0 p-1.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                                      title={
+                                        recipeExpanded
+                                          ? "Hide recipe"
+                                          : "View recipe"
+                                      }
+                                    >
+                                      {recipeExpanded ? (
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                      ) : (
+                                        <ChevronRight className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
+                                  )}
+
+                                  {/* Actions */}
+                                  {!isPreviewItem(item.id) && (
+                                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        type="button"
+                                        onClick={() => openEdit(item)}
+                                        className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setDeleteTarget(item.id)}
+                                        className="p-1.5 text-muted-foreground hover:text-brand-terracotta transition-colors"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
 
-                                {/* Price */}
-                                {item.price > 0 && (
-                                  <p className="text-sm font-light tabular-nums text-foreground shrink-0">
-                                    ${item.price.toFixed(2)}
-                                  </p>
-                                )}
-
-                                {/* Actions */}
-                                {!isPreviewItem(item.id) && (
-                                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      type="button"
-                                      onClick={() => openEdit(item)}
-                                      className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setDeleteTarget(item.id)}
-                                      className="p-1.5 text-muted-foreground hover:text-brand-terracotta transition-colors"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                )}
+                                {/* Recipe preview */}
+                                <AnimatePresence>
+                                  {recipeExpanded &&
+                                    !isPreviewItem(item.id) && (
+                                      <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: "auto" }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="overflow-hidden"
+                                      >
+                                        <RecipePreview
+                                          menuItemId={item.id}
+                                          recipes={recipes}
+                                          ingredients={ingredients}
+                                          onEditRecipe={() =>
+                                            onNavigateToInventory?.()
+                                          }
+                                        />
+                                      </motion.div>
+                                    )}
+                                </AnimatePresence>
                               </motion.div>
                             );
                           })}

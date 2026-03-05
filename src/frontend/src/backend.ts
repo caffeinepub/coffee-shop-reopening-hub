@@ -125,6 +125,10 @@ export interface Expense {
     attachmentName?: string;
     amount: number;
 }
+export interface RecipeIngredient {
+    quantityUsed: number;
+    ingredientId: bigint;
+}
 export interface TeamNote {
     id: bigint;
     title: string;
@@ -138,6 +142,23 @@ export interface MenuItem {
     available: boolean;
     category: MenuCategory;
     price: number;
+}
+export interface InventoryCountEntry {
+    actualUsage: number;
+    purchasesQty: number;
+    closingQty: number;
+    openingQty: number;
+    expectedUsage: number;
+    waste: number;
+    ingredientId: bigint;
+}
+export interface Ingredient {
+    id: bigint;
+    name: string;
+    unit: string;
+    parLevel: number;
+    category: string;
+    unitCost: number;
 }
 export interface SalesGoal {
     id: bigint;
@@ -155,6 +176,19 @@ export interface ChatMessage {
     authorName: string;
     timestamp: bigint;
     attachmentName?: string;
+}
+export interface Recipe {
+    id: bigint;
+    notes: string;
+    menuItemId: bigint;
+    ingredients: Array<RecipeIngredient>;
+}
+export interface InventoryCount {
+    id: bigint;
+    submittedAt: bigint;
+    submittedBy: string;
+    entries: Array<InventoryCountEntry>;
+    weekOf: string;
 }
 export interface _CaffeineStorageRefillResult {
     success?: boolean;
@@ -224,21 +258,30 @@ export interface backendInterface {
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createChatMessage(authorName: string, body: string, attachmentUrl: string | null, attachmentName: string | null): Promise<ChatMessage>;
     createExpense(expense: Expense): Promise<Expense>;
+    createIngredient(ingredient: Ingredient): Promise<Ingredient>;
+    createInventoryCount(invCount: InventoryCount): Promise<InventoryCount>;
     createMenuItem(item: MenuItem): Promise<MenuItem>;
+    createRecipe(recipe: Recipe): Promise<Recipe>;
     createRevenueEntry(entry: RevenueEntry): Promise<RevenueEntry>;
     createSalesGoal(goal: SalesGoal): Promise<SalesGoal>;
     createTask(task: Task): Promise<Task>;
     createTeamNote(note: TeamNote): Promise<TeamNote>;
     deleteChatMessage(id: bigint): Promise<void>;
     deleteExpense(expenseId: bigint): Promise<void>;
+    deleteIngredient(ingredientId: bigint): Promise<void>;
+    deleteInventoryCount(countId: bigint): Promise<void>;
     deleteMenuItem(itemId: bigint): Promise<void>;
+    deleteRecipe(recipeId: bigint): Promise<void>;
     deleteRevenueEntry(entryId: bigint): Promise<void>;
     deleteSalesGoal(goalId: bigint): Promise<void>;
     deleteTask(taskId: bigint): Promise<void>;
     deleteTeamNote(noteId: bigint): Promise<void>;
     getAllChatMessages(): Promise<Array<ChatMessage>>;
     getAllExpenses(): Promise<Array<Expense>>;
+    getAllIngredients(): Promise<Array<Ingredient>>;
+    getAllInventoryCounts(): Promise<Array<InventoryCount>>;
     getAllMenuItems(): Promise<Array<MenuItem>>;
+    getAllRecipes(): Promise<Array<Recipe>>;
     getAllRevenueEntries(): Promise<Array<RevenueEntry>>;
     getAllSalesGoals(): Promise<Array<SalesGoal>>;
     getAllTasks(): Promise<Array<Task>>;
@@ -247,7 +290,11 @@ export interface backendInterface {
     getCallerUserRole(): Promise<UserRole>;
     getExpense(expenseId: bigint): Promise<Expense>;
     getExpensesByDateRange(startDate: string, endDate: string): Promise<Array<Expense>>;
+    getIngredient(ingredientId: bigint): Promise<Ingredient>;
+    getInventoryCount(countId: bigint): Promise<InventoryCount>;
     getMenuItem(itemId: bigint): Promise<MenuItem>;
+    getRecipe(recipeId: bigint): Promise<Recipe>;
+    getRecipeByMenuItem(menuItemId: bigint): Promise<Recipe>;
     getRevenueByDateRange(startDate: string, endDate: string): Promise<Array<RevenueEntry>>;
     getRevenueEntry(entryId: bigint): Promise<RevenueEntry>;
     getSalesGoal(goalId: bigint): Promise<SalesGoal>;
@@ -257,7 +304,9 @@ export interface backendInterface {
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     updateExpense(updatedExpense: Expense): Promise<Expense>;
+    updateIngredient(updatedIngredient: Ingredient): Promise<Ingredient>;
     updateMenuItem(updatedItem: MenuItem): Promise<MenuItem>;
+    updateRecipe(updatedRecipe: Recipe): Promise<Recipe>;
     updateRevenueEntry(updatedEntry: RevenueEntry): Promise<RevenueEntry>;
     updateSalesGoal(updatedGoal: SalesGoal): Promise<SalesGoal>;
     updateTask(updatedTask: Task): Promise<Task>;
@@ -406,6 +455,34 @@ export class Backend implements backendInterface {
             return from_candid_Expense_n20(this._uploadFile, this._downloadFile, result);
         }
     }
+    async createIngredient(arg0: Ingredient): Promise<Ingredient> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createIngredient(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createIngredient(arg0);
+            return result;
+        }
+    }
+    async createInventoryCount(arg0: InventoryCount): Promise<InventoryCount> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createInventoryCount(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createInventoryCount(arg0);
+            return result;
+        }
+    }
     async createMenuItem(arg0: MenuItem): Promise<MenuItem> {
         if (this.processError) {
             try {
@@ -418,6 +495,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.createMenuItem(to_candid_MenuItem_n26(this._uploadFile, this._downloadFile, arg0));
             return from_candid_MenuItem_n30(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async createRecipe(arg0: Recipe): Promise<Recipe> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createRecipe(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createRecipe(arg0);
+            return result;
         }
     }
     async createRevenueEntry(arg0: RevenueEntry): Promise<RevenueEntry> {
@@ -504,6 +595,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async deleteIngredient(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteIngredient(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteIngredient(arg0);
+            return result;
+        }
+    }
+    async deleteInventoryCount(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteInventoryCount(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteInventoryCount(arg0);
+            return result;
+        }
+    }
     async deleteMenuItem(arg0: bigint): Promise<void> {
         if (this.processError) {
             try {
@@ -515,6 +634,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.deleteMenuItem(arg0);
+            return result;
+        }
+    }
+    async deleteRecipe(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteRecipe(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteRecipe(arg0);
             return result;
         }
     }
@@ -602,6 +735,34 @@ export class Backend implements backendInterface {
             return from_candid_vec_n59(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getAllIngredients(): Promise<Array<Ingredient>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllIngredients();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllIngredients();
+            return result;
+        }
+    }
+    async getAllInventoryCounts(): Promise<Array<InventoryCount>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllInventoryCounts();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllInventoryCounts();
+            return result;
+        }
+    }
     async getAllMenuItems(): Promise<Array<MenuItem>> {
         if (this.processError) {
             try {
@@ -614,6 +775,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getAllMenuItems();
             return from_candid_vec_n60(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getAllRecipes(): Promise<Array<Recipe>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllRecipes();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllRecipes();
+            return result;
         }
     }
     async getAllRevenueEntries(): Promise<Array<RevenueEntry>> {
@@ -728,6 +903,34 @@ export class Backend implements backendInterface {
             return from_candid_vec_n59(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getIngredient(arg0: bigint): Promise<Ingredient> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getIngredient(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getIngredient(arg0);
+            return result;
+        }
+    }
+    async getInventoryCount(arg0: bigint): Promise<InventoryCount> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getInventoryCount(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getInventoryCount(arg0);
+            return result;
+        }
+    }
     async getMenuItem(arg0: bigint): Promise<MenuItem> {
         if (this.processError) {
             try {
@@ -740,6 +943,34 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getMenuItem(arg0);
             return from_candid_MenuItem_n30(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getRecipe(arg0: bigint): Promise<Recipe> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getRecipe(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getRecipe(arg0);
+            return result;
+        }
+    }
+    async getRecipeByMenuItem(arg0: bigint): Promise<Recipe> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getRecipeByMenuItem(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getRecipeByMenuItem(arg0);
+            return result;
         }
     }
     async getRevenueByDateRange(arg0: string, arg1: string): Promise<Array<RevenueEntry>> {
@@ -868,6 +1099,20 @@ export class Backend implements backendInterface {
             return from_candid_Expense_n20(this._uploadFile, this._downloadFile, result);
         }
     }
+    async updateIngredient(arg0: Ingredient): Promise<Ingredient> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateIngredient(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateIngredient(arg0);
+            return result;
+        }
+    }
     async updateMenuItem(arg0: MenuItem): Promise<MenuItem> {
         if (this.processError) {
             try {
@@ -880,6 +1125,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.updateMenuItem(to_candid_MenuItem_n26(this._uploadFile, this._downloadFile, arg0));
             return from_candid_MenuItem_n30(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async updateRecipe(arg0: Recipe): Promise<Recipe> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateRecipe(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateRecipe(arg0);
+            return result;
         }
     }
     async updateRevenueEntry(arg0: RevenueEntry): Promise<RevenueEntry> {

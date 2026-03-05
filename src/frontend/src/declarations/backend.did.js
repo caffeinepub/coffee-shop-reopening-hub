@@ -62,6 +62,30 @@ export const Expense = IDL.Record({
   'attachmentName' : IDL.Opt(IDL.Text),
   'amount' : IDL.Float64,
 });
+export const Ingredient = IDL.Record({
+  'id' : IDL.Nat,
+  'name' : IDL.Text,
+  'unit' : IDL.Text,
+  'parLevel' : IDL.Float64,
+  'category' : IDL.Text,
+  'unitCost' : IDL.Float64,
+});
+export const InventoryCountEntry = IDL.Record({
+  'actualUsage' : IDL.Float64,
+  'purchasesQty' : IDL.Float64,
+  'closingQty' : IDL.Float64,
+  'openingQty' : IDL.Float64,
+  'expectedUsage' : IDL.Float64,
+  'waste' : IDL.Float64,
+  'ingredientId' : IDL.Nat,
+});
+export const InventoryCount = IDL.Record({
+  'id' : IDL.Nat,
+  'submittedAt' : IDL.Int,
+  'submittedBy' : IDL.Text,
+  'entries' : IDL.Vec(InventoryCountEntry),
+  'weekOf' : IDL.Text,
+});
 export const MenuCategory = IDL.Variant({
   'coldDrinks' : IDL.Null,
   'sandwiches' : IDL.Null,
@@ -75,6 +99,16 @@ export const MenuItem = IDL.Record({
   'available' : IDL.Bool,
   'category' : MenuCategory,
   'price' : IDL.Float64,
+});
+export const RecipeIngredient = IDL.Record({
+  'quantityUsed' : IDL.Float64,
+  'ingredientId' : IDL.Nat,
+});
+export const Recipe = IDL.Record({
+  'id' : IDL.Nat,
+  'notes' : IDL.Text,
+  'menuItemId' : IDL.Nat,
+  'ingredients' : IDL.Vec(RecipeIngredient),
 });
 export const RevenueEntry = IDL.Record({
   'id' : IDL.Nat,
@@ -166,21 +200,30 @@ export const idlService = IDL.Service({
       [],
     ),
   'createExpense' : IDL.Func([Expense], [Expense], []),
+  'createIngredient' : IDL.Func([Ingredient], [Ingredient], []),
+  'createInventoryCount' : IDL.Func([InventoryCount], [InventoryCount], []),
   'createMenuItem' : IDL.Func([MenuItem], [MenuItem], []),
+  'createRecipe' : IDL.Func([Recipe], [Recipe], []),
   'createRevenueEntry' : IDL.Func([RevenueEntry], [RevenueEntry], []),
   'createSalesGoal' : IDL.Func([SalesGoal], [SalesGoal], []),
   'createTask' : IDL.Func([Task], [Task], []),
   'createTeamNote' : IDL.Func([TeamNote], [TeamNote], []),
   'deleteChatMessage' : IDL.Func([IDL.Nat], [], []),
   'deleteExpense' : IDL.Func([IDL.Nat], [], []),
+  'deleteIngredient' : IDL.Func([IDL.Nat], [], []),
+  'deleteInventoryCount' : IDL.Func([IDL.Nat], [], []),
   'deleteMenuItem' : IDL.Func([IDL.Nat], [], []),
+  'deleteRecipe' : IDL.Func([IDL.Nat], [], []),
   'deleteRevenueEntry' : IDL.Func([IDL.Nat], [], []),
   'deleteSalesGoal' : IDL.Func([IDL.Nat], [], []),
   'deleteTask' : IDL.Func([IDL.Nat], [], []),
   'deleteTeamNote' : IDL.Func([IDL.Nat], [], []),
   'getAllChatMessages' : IDL.Func([], [IDL.Vec(ChatMessage)], ['query']),
   'getAllExpenses' : IDL.Func([], [IDL.Vec(Expense)], ['query']),
+  'getAllIngredients' : IDL.Func([], [IDL.Vec(Ingredient)], ['query']),
+  'getAllInventoryCounts' : IDL.Func([], [IDL.Vec(InventoryCount)], ['query']),
   'getAllMenuItems' : IDL.Func([], [IDL.Vec(MenuItem)], ['query']),
+  'getAllRecipes' : IDL.Func([], [IDL.Vec(Recipe)], ['query']),
   'getAllRevenueEntries' : IDL.Func([], [IDL.Vec(RevenueEntry)], ['query']),
   'getAllSalesGoals' : IDL.Func([], [IDL.Vec(SalesGoal)], ['query']),
   'getAllTasks' : IDL.Func([], [IDL.Vec(Task)], ['query']),
@@ -193,7 +236,11 @@ export const idlService = IDL.Service({
       [IDL.Vec(Expense)],
       ['query'],
     ),
+  'getIngredient' : IDL.Func([IDL.Nat], [Ingredient], ['query']),
+  'getInventoryCount' : IDL.Func([IDL.Nat], [InventoryCount], ['query']),
   'getMenuItem' : IDL.Func([IDL.Nat], [MenuItem], ['query']),
+  'getRecipe' : IDL.Func([IDL.Nat], [Recipe], ['query']),
+  'getRecipeByMenuItem' : IDL.Func([IDL.Nat], [Recipe], ['query']),
   'getRevenueByDateRange' : IDL.Func(
       [IDL.Text, IDL.Text],
       [IDL.Vec(RevenueEntry)],
@@ -211,7 +258,9 @@ export const idlService = IDL.Service({
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'updateExpense' : IDL.Func([Expense], [Expense], []),
+  'updateIngredient' : IDL.Func([Ingredient], [Ingredient], []),
   'updateMenuItem' : IDL.Func([MenuItem], [MenuItem], []),
+  'updateRecipe' : IDL.Func([Recipe], [Recipe], []),
   'updateRevenueEntry' : IDL.Func([RevenueEntry], [RevenueEntry], []),
   'updateSalesGoal' : IDL.Func([SalesGoal], [SalesGoal], []),
   'updateTask' : IDL.Func([Task], [Task], []),
@@ -275,6 +324,30 @@ export const idlFactory = ({ IDL }) => {
     'attachmentName' : IDL.Opt(IDL.Text),
     'amount' : IDL.Float64,
   });
+  const Ingredient = IDL.Record({
+    'id' : IDL.Nat,
+    'name' : IDL.Text,
+    'unit' : IDL.Text,
+    'parLevel' : IDL.Float64,
+    'category' : IDL.Text,
+    'unitCost' : IDL.Float64,
+  });
+  const InventoryCountEntry = IDL.Record({
+    'actualUsage' : IDL.Float64,
+    'purchasesQty' : IDL.Float64,
+    'closingQty' : IDL.Float64,
+    'openingQty' : IDL.Float64,
+    'expectedUsage' : IDL.Float64,
+    'waste' : IDL.Float64,
+    'ingredientId' : IDL.Nat,
+  });
+  const InventoryCount = IDL.Record({
+    'id' : IDL.Nat,
+    'submittedAt' : IDL.Int,
+    'submittedBy' : IDL.Text,
+    'entries' : IDL.Vec(InventoryCountEntry),
+    'weekOf' : IDL.Text,
+  });
   const MenuCategory = IDL.Variant({
     'coldDrinks' : IDL.Null,
     'sandwiches' : IDL.Null,
@@ -288,6 +361,16 @@ export const idlFactory = ({ IDL }) => {
     'available' : IDL.Bool,
     'category' : MenuCategory,
     'price' : IDL.Float64,
+  });
+  const RecipeIngredient = IDL.Record({
+    'quantityUsed' : IDL.Float64,
+    'ingredientId' : IDL.Nat,
+  });
+  const Recipe = IDL.Record({
+    'id' : IDL.Nat,
+    'notes' : IDL.Text,
+    'menuItemId' : IDL.Nat,
+    'ingredients' : IDL.Vec(RecipeIngredient),
   });
   const RevenueEntry = IDL.Record({
     'id' : IDL.Nat,
@@ -379,21 +462,34 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'createExpense' : IDL.Func([Expense], [Expense], []),
+    'createIngredient' : IDL.Func([Ingredient], [Ingredient], []),
+    'createInventoryCount' : IDL.Func([InventoryCount], [InventoryCount], []),
     'createMenuItem' : IDL.Func([MenuItem], [MenuItem], []),
+    'createRecipe' : IDL.Func([Recipe], [Recipe], []),
     'createRevenueEntry' : IDL.Func([RevenueEntry], [RevenueEntry], []),
     'createSalesGoal' : IDL.Func([SalesGoal], [SalesGoal], []),
     'createTask' : IDL.Func([Task], [Task], []),
     'createTeamNote' : IDL.Func([TeamNote], [TeamNote], []),
     'deleteChatMessage' : IDL.Func([IDL.Nat], [], []),
     'deleteExpense' : IDL.Func([IDL.Nat], [], []),
+    'deleteIngredient' : IDL.Func([IDL.Nat], [], []),
+    'deleteInventoryCount' : IDL.Func([IDL.Nat], [], []),
     'deleteMenuItem' : IDL.Func([IDL.Nat], [], []),
+    'deleteRecipe' : IDL.Func([IDL.Nat], [], []),
     'deleteRevenueEntry' : IDL.Func([IDL.Nat], [], []),
     'deleteSalesGoal' : IDL.Func([IDL.Nat], [], []),
     'deleteTask' : IDL.Func([IDL.Nat], [], []),
     'deleteTeamNote' : IDL.Func([IDL.Nat], [], []),
     'getAllChatMessages' : IDL.Func([], [IDL.Vec(ChatMessage)], ['query']),
     'getAllExpenses' : IDL.Func([], [IDL.Vec(Expense)], ['query']),
+    'getAllIngredients' : IDL.Func([], [IDL.Vec(Ingredient)], ['query']),
+    'getAllInventoryCounts' : IDL.Func(
+        [],
+        [IDL.Vec(InventoryCount)],
+        ['query'],
+      ),
     'getAllMenuItems' : IDL.Func([], [IDL.Vec(MenuItem)], ['query']),
+    'getAllRecipes' : IDL.Func([], [IDL.Vec(Recipe)], ['query']),
     'getAllRevenueEntries' : IDL.Func([], [IDL.Vec(RevenueEntry)], ['query']),
     'getAllSalesGoals' : IDL.Func([], [IDL.Vec(SalesGoal)], ['query']),
     'getAllTasks' : IDL.Func([], [IDL.Vec(Task)], ['query']),
@@ -406,7 +502,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(Expense)],
         ['query'],
       ),
+    'getIngredient' : IDL.Func([IDL.Nat], [Ingredient], ['query']),
+    'getInventoryCount' : IDL.Func([IDL.Nat], [InventoryCount], ['query']),
     'getMenuItem' : IDL.Func([IDL.Nat], [MenuItem], ['query']),
+    'getRecipe' : IDL.Func([IDL.Nat], [Recipe], ['query']),
+    'getRecipeByMenuItem' : IDL.Func([IDL.Nat], [Recipe], ['query']),
     'getRevenueByDateRange' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Vec(RevenueEntry)],
@@ -424,7 +524,9 @@ export const idlFactory = ({ IDL }) => {
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'updateExpense' : IDL.Func([Expense], [Expense], []),
+    'updateIngredient' : IDL.Func([Ingredient], [Ingredient], []),
     'updateMenuItem' : IDL.Func([MenuItem], [MenuItem], []),
+    'updateRecipe' : IDL.Func([Recipe], [Recipe], []),
     'updateRevenueEntry' : IDL.Func([RevenueEntry], [RevenueEntry], []),
     'updateSalesGoal' : IDL.Func([SalesGoal], [SalesGoal], []),
     'updateTask' : IDL.Func([Task], [Task], []),

@@ -1,16 +1,16 @@
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
-import Int "mo:core/Int";
 import Text "mo:core/Text";
+import Int "mo:core/Int";
 import List "mo:core/List";
 import Array "mo:core/Array";
 import Char "mo:core/Char";
-import Runtime "mo:core/Runtime";
-import Time "mo:core/Time";
 import Float "mo:core/Float";
 import Order "mo:core/Order";
-import Principal "mo:core/Principal";
+import Time "mo:core/Time";
 import Iter "mo:core/Iter";
+import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
 import MixinStorage "blob-storage/Mixin";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
@@ -25,6 +25,27 @@ actor {
 
   public type UserProfile = {
     name : Text;
+  };
+
+  public type ExpenseCategory = {
+    #rent;
+    #utilities;
+    #labor;
+    #supplies;
+    #marketing;
+    #website;
+    #equipment;
+    #licensing;
+    #cleaning;
+    #legal;
+    #custom;
+  };
+
+  public type MenuCategory = {
+    #espressoDrinks;
+    #pastries;
+    #sandwiches;
+    #coldDrinks;
   };
 
   public type TaskCategory = {
@@ -47,21 +68,37 @@ actor {
     #low;
   };
 
-  public type Task = {
-    id : Nat;
-    title : Text;
-    category : TaskCategory;
-    assignee : Text;
-    dueDate : Text;
-    status : TaskStatus;
-    priority : TaskPriority;
+  public type GoalPeriod = {
+    #daily;
+    #weekly;
+    #monthly;
   };
 
-  public type MenuCategory = {
-    #espressoDrinks;
-    #pastries;
-    #sandwiches;
-    #coldDrinks;
+  public type PaymentStatus = {
+    #paid;
+    #payable;
+  };
+
+  public type RevenueEntry = {
+    id : Nat;
+    date : Text;
+    totalRevenue : Float;
+    notes : Text;
+    source : Text;
+    createdBy : Text;
+  };
+
+  public type Expense = {
+    id : Nat;
+    description : Text;
+    amount : Float;
+    category : ExpenseCategory;
+    date : Text;
+    notes : Text;
+    createdBy : Text;
+    paymentStatus : PaymentStatus;
+    attachmentUrl : ?Text;
+    attachmentName : ?Text;
   };
 
   public type MenuItem = {
@@ -73,12 +110,6 @@ actor {
     available : Bool;
   };
 
-  public type GoalPeriod = {
-    #daily;
-    #weekly;
-    #monthly;
-  };
-
   public type SalesGoal = {
     id : Nat;
     name : Text;
@@ -86,6 +117,16 @@ actor {
     currentProgress : Nat;
     period : GoalPeriod;
     notes : Text;
+  };
+
+  public type Task = {
+    id : Nat;
+    title : Text;
+    category : TaskCategory;
+    assignee : Text;
+    dueDate : Text;
+    status : TaskStatus;
+    priority : TaskPriority;
   };
 
   public type TeamNote = {
@@ -105,45 +146,43 @@ actor {
     attachmentName : ?Text;
   };
 
-  public type ExpenseCategory = {
-    #rent;
-    #utilities;
-    #labor;
-    #supplies;
-    #marketing;
-    #website;
-    #equipment;
-    #licensing;
-    #cleaning;
-    #legal;
-    #custom;
-  };
-
-  public type PaymentStatus = {
-    #paid;
-    #payable;
-  };
-
-  public type Expense = {
+  public type Ingredient = {
     id : Nat;
-    description : Text;
-    amount : Float;
-    category : ExpenseCategory;
-    date : Text;
-    notes : Text;
-    createdBy : Text;
-    paymentStatus : PaymentStatus;
-    attachmentUrl : ?Text;
-    attachmentName : ?Text;
+    name : Text;
+    unit : Text;
+    unitCost : Float;
+    parLevel : Float;
+    category : Text;
   };
 
-  public type RevenueEntry = {
+  public type RecipeIngredient = {
+    ingredientId : Nat;
+    quantityUsed : Float;
+  };
+
+  public type Recipe = {
     id : Nat;
-    date : Text;
-    totalRevenue : Float;
+    menuItemId : Nat;
+    ingredients : [RecipeIngredient];
     notes : Text;
-    source : Text;
-    createdBy : Text;
+  };
+
+  public type InventoryCountEntry = {
+    ingredientId : Nat;
+    openingQty : Float;
+    purchasesQty : Float;
+    closingQty : Float;
+    expectedUsage : Float;
+    actualUsage : Float;
+    waste : Float;
+  };
+
+  public type InventoryCount = {
+    id : Nat;
+    weekOf : Text;
+    entries : [InventoryCountEntry];
+    submittedBy : Text;
+    submittedAt : Int;
   };
 
   var nextTaskId = 0;
@@ -153,6 +192,9 @@ actor {
   var nextChatMessageId = 0;
   var nextExpenseId = 0;
   var nextRevenueEntryId = 0;
+  var nextIngredientId = 0;
+  var nextRecipeId = 0;
+  var nextInventoryCountId = 0;
 
   let tasks = Map.empty<Nat, Task>();
   let menuItems = Map.empty<Nat, MenuItem>();
@@ -162,6 +204,11 @@ actor {
   let chatMessages = Map.empty<Nat, ChatMessage>();
   let expenses = Map.empty<Nat, Expense>();
   let revenueEntries = Map.empty<Nat, RevenueEntry>();
+
+  // New persistent maps for new features
+  let ingredients = Map.empty<Nat, Ingredient>();
+  let recipes = Map.empty<Nat, Recipe>();
+  let inventoryCounts = Map.empty<Nat, InventoryCount>();
 
   module Task {
     public func compare(task1 : Task, task2 : Task) : Order.Order {
@@ -209,6 +256,25 @@ actor {
     };
   };
 
+  module Ingredient {
+    public func compare(ingredient1 : Ingredient, ingredient2 : Ingredient) : Order.Order {
+      Nat.compare(ingredient1.id, ingredient2.id);
+    };
+  };
+
+  module Recipe {
+    public func compare(recipe1 : Recipe, recipe2 : Recipe) : Order.Order {
+      Nat.compare(recipe1.id, recipe2.id);
+    };
+  };
+
+  module InventoryCount {
+    public func compare(invCount1 : InventoryCount, invCount2 : InventoryCount) : Order.Order {
+      Nat.compare(invCount1.id, invCount2.id);
+    };
+  };
+
+  // User Profile functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can view profiles");
@@ -230,6 +296,7 @@ actor {
     userProfiles.add(caller, profile);
   };
 
+  // Task functions
   public shared ({ caller }) func createTask(task : Task) : async Task {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create tasks");
@@ -284,6 +351,7 @@ actor {
     tasks.remove(taskId);
   };
 
+  // Menu Item functions
   public shared ({ caller }) func createMenuItem(item : MenuItem) : async MenuItem {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create menu items");
@@ -338,6 +406,7 @@ actor {
     menuItems.remove(itemId);
   };
 
+  // Sales Goal functions
   public shared ({ caller }) func createSalesGoal(goal : SalesGoal) : async SalesGoal {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create sales goals");
@@ -392,6 +461,7 @@ actor {
     salesGoals.remove(goalId);
   };
 
+  // Team Note functions
   public shared ({ caller }) func createTeamNote(note : TeamNote) : async TeamNote {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create team notes");
@@ -446,6 +516,7 @@ actor {
     teamNotes.remove(noteId);
   };
 
+  // Chat Message functions
   public shared ({ caller }) func createChatMessage(
     authorName : Text,
     body : Text,
@@ -661,5 +732,179 @@ actor {
         entry.date >= startDate and entry.date <= endDate
       }
     );
+  };
+
+  // Ingredient CRUD
+  public shared ({ caller }) func createIngredient(ingredient : Ingredient) : async Ingredient {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create ingredients");
+    };
+    let ingredientId = nextIngredientId;
+    nextIngredientId += 1;
+    let newIngredient = { ingredient with id = ingredientId };
+    ingredients.add(ingredientId, newIngredient);
+    newIngredient;
+  };
+
+  public query ({ caller }) func getIngredient(ingredientId : Nat) : async Ingredient {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view ingredients");
+    };
+    switch (ingredients.get(ingredientId)) {
+      case (null) { Runtime.trap("Ingredient does not exist") };
+      case (?ingredient) { ingredient };
+    };
+  };
+
+  public query ({ caller }) func getAllIngredients() : async [Ingredient] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view ingredients");
+    };
+    ingredients.values().toArray().sort();
+  };
+
+  public shared ({ caller }) func updateIngredient(updatedIngredient : Ingredient) : async Ingredient {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can update ingredients");
+    };
+    switch (ingredients.get(updatedIngredient.id)) {
+      case (null) { Runtime.trap("Ingredient does not exist") };
+      case (?_existingIngredient) {
+        ingredients.add(updatedIngredient.id, updatedIngredient);
+        updatedIngredient;
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteIngredient(ingredientId : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete ingredients");
+    };
+    if (not ingredients.containsKey(ingredientId)) {
+      Runtime.trap("Ingredient does not exist");
+    };
+    ingredients.remove(ingredientId);
+  };
+
+  // Recipe CRUD
+  public shared ({ caller }) func createRecipe(recipe : Recipe) : async Recipe {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create recipes");
+    };
+    let recipeId = nextRecipeId;
+    nextRecipeId += 1;
+    let newRecipe = { recipe with id = recipeId };
+    recipes.add(recipeId, newRecipe);
+    newRecipe;
+  };
+
+  public query ({ caller }) func getRecipe(recipeId : Nat) : async Recipe {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view recipes");
+    };
+    switch (recipes.get(recipeId)) {
+      case (null) { Runtime.trap("Recipe does not exist") };
+      case (?recipe) { recipe };
+    };
+  };
+
+  public query ({ caller }) func getRecipeByMenuItem(menuItemId : Nat) : async Recipe {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view recipes");
+    };
+    let foundRecipe = recipes.values().toArray().find(
+      func(recipe) { recipe.menuItemId == menuItemId }
+    );
+    switch (foundRecipe) {
+      case (null) { Runtime.trap("Recipe for this menu item does not exist") };
+      case (?recipe) { recipe };
+    };
+  };
+
+  public query ({ caller }) func getAllRecipes() : async [Recipe] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view recipes");
+    };
+    recipes.values().toArray().sort();
+  };
+
+  public shared ({ caller }) func updateRecipe(updatedRecipe : Recipe) : async Recipe {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can update recipes");
+    };
+    switch (recipes.get(updatedRecipe.id)) {
+      case (null) { Runtime.trap("Recipe does not exist") };
+      case (?_existingRecipe) {
+        recipes.add(updatedRecipe.id, updatedRecipe);
+        updatedRecipe;
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteRecipe(recipeId : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete recipes");
+    };
+    if (not recipes.containsKey(recipeId)) {
+      Runtime.trap("Recipe does not exist");
+    };
+    recipes.remove(recipeId);
+  };
+
+  // Inventory Count CRUD
+  public shared ({ caller }) func createInventoryCount(invCount : InventoryCount) : async InventoryCount {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create inventory counts");
+    };
+    let countId = nextInventoryCountId;
+    nextInventoryCountId += 1;
+
+    let calculatedEntries = invCount.entries.map(
+      func(entry) {
+        let actualUsage = entry.openingQty + entry.purchasesQty - entry.closingQty;
+        let waste = actualUsage - entry.expectedUsage;
+        {
+          entry with
+          actualUsage;
+          waste;
+        };
+      }
+    );
+
+    let newInventoryCount = {
+      invCount with
+      id = countId;
+      submittedAt = Time.now();
+      entries = calculatedEntries;
+    };
+    inventoryCounts.add(countId, newInventoryCount);
+    newInventoryCount;
+  };
+
+  public query ({ caller }) func getInventoryCount(countId : Nat) : async InventoryCount {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view inventory counts");
+    };
+    switch (inventoryCounts.get(countId)) {
+      case (null) { Runtime.trap("Inventory count does not exist") };
+      case (?count) { count };
+    };
+  };
+
+  public query ({ caller }) func getAllInventoryCounts() : async [InventoryCount] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view inventory counts");
+    };
+    inventoryCounts.values().toArray().sort();
+  };
+
+  public shared ({ caller }) func deleteInventoryCount(countId : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete inventory counts");
+    };
+    if (not inventoryCounts.containsKey(countId)) {
+      Runtime.trap("Inventory count does not exist");
+    };
+    inventoryCounts.remove(countId);
   };
 };

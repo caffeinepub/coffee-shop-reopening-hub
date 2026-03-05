@@ -45,6 +45,30 @@ export type ExpenseCategory = { 'cleaning' : null } |
 export type GoalPeriod = { 'monthly' : null } |
   { 'daily' : null } |
   { 'weekly' : null };
+export interface Ingredient {
+  'id' : bigint,
+  'name' : string,
+  'unit' : string,
+  'parLevel' : number,
+  'category' : string,
+  'unitCost' : number,
+}
+export interface InventoryCount {
+  'id' : bigint,
+  'submittedAt' : bigint,
+  'submittedBy' : string,
+  'entries' : Array<InventoryCountEntry>,
+  'weekOf' : string,
+}
+export interface InventoryCountEntry {
+  'actualUsage' : number,
+  'purchasesQty' : number,
+  'closingQty' : number,
+  'openingQty' : number,
+  'expectedUsage' : number,
+  'waste' : number,
+  'ingredientId' : bigint,
+}
 export type MenuCategory = { 'coldDrinks' : null } |
   { 'sandwiches' : null } |
   { 'espressoDrinks' : null } |
@@ -59,6 +83,16 @@ export interface MenuItem {
 }
 export type PaymentStatus = { 'paid' : null } |
   { 'payable' : null };
+export interface Recipe {
+  'id' : bigint,
+  'notes' : string,
+  'menuItemId' : bigint,
+  'ingredients' : Array<RecipeIngredient>,
+}
+export interface RecipeIngredient {
+  'quantityUsed' : number,
+  'ingredientId' : bigint,
+}
 export interface RevenueEntry {
   'id' : bigint,
   'source' : string,
@@ -139,21 +173,30 @@ export interface _SERVICE {
     ChatMessage
   >,
   'createExpense' : ActorMethod<[Expense], Expense>,
+  'createIngredient' : ActorMethod<[Ingredient], Ingredient>,
+  'createInventoryCount' : ActorMethod<[InventoryCount], InventoryCount>,
   'createMenuItem' : ActorMethod<[MenuItem], MenuItem>,
+  'createRecipe' : ActorMethod<[Recipe], Recipe>,
   'createRevenueEntry' : ActorMethod<[RevenueEntry], RevenueEntry>,
   'createSalesGoal' : ActorMethod<[SalesGoal], SalesGoal>,
   'createTask' : ActorMethod<[Task], Task>,
   'createTeamNote' : ActorMethod<[TeamNote], TeamNote>,
   'deleteChatMessage' : ActorMethod<[bigint], undefined>,
   'deleteExpense' : ActorMethod<[bigint], undefined>,
+  'deleteIngredient' : ActorMethod<[bigint], undefined>,
+  'deleteInventoryCount' : ActorMethod<[bigint], undefined>,
   'deleteMenuItem' : ActorMethod<[bigint], undefined>,
+  'deleteRecipe' : ActorMethod<[bigint], undefined>,
   'deleteRevenueEntry' : ActorMethod<[bigint], undefined>,
   'deleteSalesGoal' : ActorMethod<[bigint], undefined>,
   'deleteTask' : ActorMethod<[bigint], undefined>,
   'deleteTeamNote' : ActorMethod<[bigint], undefined>,
   'getAllChatMessages' : ActorMethod<[], Array<ChatMessage>>,
   'getAllExpenses' : ActorMethod<[], Array<Expense>>,
+  'getAllIngredients' : ActorMethod<[], Array<Ingredient>>,
+  'getAllInventoryCounts' : ActorMethod<[], Array<InventoryCount>>,
   'getAllMenuItems' : ActorMethod<[], Array<MenuItem>>,
+  'getAllRecipes' : ActorMethod<[], Array<Recipe>>,
   'getAllRevenueEntries' : ActorMethod<[], Array<RevenueEntry>>,
   'getAllSalesGoals' : ActorMethod<[], Array<SalesGoal>>,
   'getAllTasks' : ActorMethod<[], Array<Task>>,
@@ -162,7 +205,11 @@ export interface _SERVICE {
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getExpense' : ActorMethod<[bigint], Expense>,
   'getExpensesByDateRange' : ActorMethod<[string, string], Array<Expense>>,
+  'getIngredient' : ActorMethod<[bigint], Ingredient>,
+  'getInventoryCount' : ActorMethod<[bigint], InventoryCount>,
   'getMenuItem' : ActorMethod<[bigint], MenuItem>,
+  'getRecipe' : ActorMethod<[bigint], Recipe>,
+  'getRecipeByMenuItem' : ActorMethod<[bigint], Recipe>,
   'getRevenueByDateRange' : ActorMethod<[string, string], Array<RevenueEntry>>,
   'getRevenueEntry' : ActorMethod<[bigint], RevenueEntry>,
   'getSalesGoal' : ActorMethod<[bigint], SalesGoal>,
@@ -172,7 +219,9 @@ export interface _SERVICE {
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'updateExpense' : ActorMethod<[Expense], Expense>,
+  'updateIngredient' : ActorMethod<[Ingredient], Ingredient>,
   'updateMenuItem' : ActorMethod<[MenuItem], MenuItem>,
+  'updateRecipe' : ActorMethod<[Recipe], Recipe>,
   'updateRevenueEntry' : ActorMethod<[RevenueEntry], RevenueEntry>,
   'updateSalesGoal' : ActorMethod<[SalesGoal], SalesGoal>,
   'updateTask' : ActorMethod<[Task], Task>,

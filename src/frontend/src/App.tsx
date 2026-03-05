@@ -3,6 +3,7 @@ import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import { useSeedData } from "@/hooks/useSeedData";
 import Chat from "@/pages/Chat";
 import Dashboard from "@/pages/Dashboard";
+import InventoryPage from "@/pages/Inventory";
 import Login from "@/pages/Login";
 import MenuPage from "@/pages/Menu";
 import PnL from "@/pages/PnL";
@@ -14,6 +15,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Package,
   TrendingUp,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -50,7 +52,7 @@ function WhoAreYou({ onSelect }: { onSelect: (name: TeamMember) => void }) {
       >
         {/* Wordmark */}
         <p className="text-sidebar-foreground/30 text-xs uppercase tracking-widest mb-10 font-light">
-          ALL DAY · Reopening Manager
+          ALL DAY · Pop-Up Manager
         </p>
 
         {/* Heading */}
@@ -83,7 +85,7 @@ function WhoAreYou({ onSelect }: { onSelect: (name: TeamMember) => void }) {
   );
 }
 
-type Page = "dashboard" | "tasks" | "menu" | "goals" | "chat";
+type Page = "dashboard" | "tasks" | "menu" | "inventory" | "goals" | "chat";
 
 const navItems: {
   id: Page;
@@ -99,6 +101,12 @@ const navItems: {
   },
   { id: "tasks", label: "Tasks", icon: CheckSquare, ocid: "nav.tasks_link" },
   { id: "menu", label: "Menu", icon: Coffee, ocid: "nav.menu_link" },
+  {
+    id: "inventory",
+    label: "Inventory",
+    icon: Package,
+    ocid: "nav.inventory_link",
+  },
   {
     id: "goals",
     label: "Financials",
@@ -145,6 +153,7 @@ function AppShell() {
     dashboard: <Dashboard />,
     tasks: <Tasks />,
     menu: <MenuPage />,
+    inventory: <InventoryPage />,
     goals: <PnL />,
     chat: <Chat />,
   };
@@ -157,7 +166,7 @@ function AppShell() {
           ALL DAY
         </p>
         <p className="text-sidebar-foreground/30 text-xs uppercase tracking-widest mt-1.5 font-light">
-          Reopening Manager
+          Pop-Up Manager
         </p>
       </div>
 

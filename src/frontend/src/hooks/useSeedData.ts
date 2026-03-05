@@ -1,7 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import type { MenuItem, SalesGoal, Task, TeamNote } from "../backend.d";
+import type {
+  Expense,
+  MenuItem,
+  SalesGoal,
+  Task,
+  TeamNote,
+} from "../backend.d";
 import {
+  SEED_EXPENSES,
   SEED_MENU_ITEMS,
   SEED_SALES_GOALS,
   SEED_TASKS,
@@ -37,11 +44,13 @@ export function useSeedData() {
             existingMenuItems,
             existingGoals,
             existingNotes,
+            existingExpenses,
           ] = await Promise.all([
             actor.getAllTasks(),
             actor.getAllMenuItems(),
             actor.getAllSalesGoals(),
             actor.getAllTeamNotes(),
+            actor.getAllExpenses(),
           ]);
 
           let didSeed = false;
@@ -102,12 +111,26 @@ export function useSeedData() {
             }
           }
 
+          // ── Expenses ─────────────────────────────────────────────────────
+          // Only seed when the backend is completely empty (canister wipe).
+          // This avoids overwriting user-entered expenses with seed data.
+          if (SEED_EXPENSES.length > 0 && existingExpenses.length === 0) {
+            didSeed = true;
+            for (const e of SEED_EXPENSES) {
+              await actor.createExpense({
+                id: BigInt(0),
+                ...e,
+              } as Expense);
+            }
+          }
+
           if (didSeed) {
             await Promise.all([
               qc.invalidateQueries({ queryKey: ["tasks"] }),
               qc.invalidateQueries({ queryKey: ["menuItems"] }),
               qc.invalidateQueries({ queryKey: ["salesGoals"] }),
               qc.invalidateQueries({ queryKey: ["teamNotes"] }),
+              qc.invalidateQueries({ queryKey: ["expenses"] }),
             ]);
           }
 

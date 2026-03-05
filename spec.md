@@ -1,39 +1,38 @@
 # Coffee Shop Reopening Hub
 
 ## Current State
-- Team Chat: messages saved with body, author, timestamp, file attachment, and extracted hashtags
-- P&L: Expenses stored with category (enum), amount, date, description, notes, createdBy
-- No connection between chat and P&L -- posting in chat never creates expense entries
-- ExpenseCategory has: rent, utilities, labor, supplies, marketing, equipment, licensing, cleaning, legal, custom
-- No paid/payable status on expenses
-- No website subcategory under marketing
+- The app is labeled "Reopening Manager" in the sidebar, login page, WhoAreYou screen, and dashboard heading.
+- Task categories are hardcoded as a TypeScript enum (`TaskCategory`) with five fixed values: equipment, staffing, marketing, cleaning, permits. Users cannot add or remove categories.
+- Unit conversion for ingredients/recipes was just added (already complete).
 
 ## Requested Changes (Diff)
 
 ### Add
-- `paymentStatus` field on `Expense`: `#paid` or `#payable`
-- `website` subcategory under marketing (as a new `ExpenseCategory` variant)
-- Smart parsing logic in frontend: after a chat message is sent, scan the message body for dollar amounts and contextual keywords to infer category and suggest an expense entry
-- Confirmation dialog in Chat: if parsing detects a potential expense, show a pre-filled "Add to P&L?" dialog the user can confirm or dismiss
-- Attached file (invoice) linked to the expense entry via `attachmentUrl` and `attachmentName` fields on Expense
-- PAID / PAYABLE toggle filter on P&L page, searchable/filterable
-- Visual badge on each expense row showing PAID or PAYABLE status
-- Category keyword mapping for smart parsing: e.g. "square", "subscription", "domain", "website", "online store" → `#website` (marketing subcategory)
+- **Custom task category management**: A "Manage Categories" button on the Tasks page that opens a dialog where users can add new custom categories (free-text) and remove existing ones. Custom categories are stored in `localStorage` so they persist across sessions without requiring backend changes. The category select in the Add/Edit Task dialog and the filter dropdown must reflect the full list (built-in + custom).
 
 ### Modify
-- `Expense` type in backend: add `paymentStatus` variant field and `attachmentUrl`/`attachmentName` optional fields
-- `ExpenseCategory` enum: add `#website` variant
-- P&L page: add PAID/PAYABLE toggle filter; show badge on each row; default new expenses to `#payable`
-- Expense creation dialog: add payment status selector (PAID / PAYABLE), default to PAYABLE
-- Chat send handler: after message posts, run smart parser and conditionally show confirmation dialog
+- **Rename "Reopening Manager" to "Pop-Up Manager"** everywhere it appears:
+  - `App.tsx`: sidebar wordmark subtitle and WhoAreYou screen subtitle
+  - `Login.tsx`: left panel subtitle, mobile wordmark subtitle, and sign-in description text
+  - `Dashboard.tsx`: page heading "Reopening Status" → "Pop-Up Status"
+- **Tasks.tsx**: 
+  - Add a "Manage Categories" button near the filter area (small, secondary style)
+  - Add a category management dialog: shows list of all categories with delete buttons (cannot delete built-in ones), plus an input + add button to create new ones
+  - Custom categories are stored in `localStorage` under key `alldaymia_custom_categories` as a JSON array of strings
+  - The category filter dropdown and the task form category select both include custom categories
+  - Tasks that have a custom category string show that string as their label (fallback for unknown enum values)
 
 ### Remove
-- Nothing removed
+- Nothing removed.
 
 ## Implementation Plan
-1. Update `Expense` type in `main.mo`: add `paymentStatus : { #paid; #payable }`, `attachmentUrl : ?Text`, `attachmentName : ?Text`
-2. Add `#website` to `ExpenseCategory` enum in `main.mo`
-3. Update frontend `PnL.tsx`: add `paymentStatus` to form, add PAID/PAYABLE filter toggle, show badge per row
-4. Update frontend `Chat.tsx`: after send, run `parseExpenseFromMessage()` util; if result found, show confirmation dialog pre-filled with parsed amount, category (website/marketing/etc.), description, date, paymentStatus (default payable), and attachment from the message
-5. Add `parseExpenseFromMessage` utility: regex for dollar amounts, keyword-to-category map
-6. Wire attachment URL/name from chat message into expense confirmation dialog so invoice is saved with the expense
+1. In `App.tsx`: replace all 2 instances of "Reopening Manager" with "Pop-Up Manager".
+2. In `Login.tsx`: replace "Reopening Manager" (×2) and "Your reopening, organized." and "Access your reopening dashboard..." with Pop-Up equivalents.
+3. In `Dashboard.tsx`: replace "Reopening Status" with "Pop-Up Status".
+4. In `Tasks.tsx`:
+   - Add `useCustomCategories` hook-like logic (useState + localStorage init) that merges built-in `categoryLabels` with custom categories.
+   - Add "Manage Categories" secondary button in the filter row header area.
+   - Add a `CategoryManagerDialog` component: lists all built-in + custom categories, built-ins show a lock icon (no delete), custom ones show a trash button. Has an input + "Add" button. Saves to localStorage on every change.
+   - Update the category filter `<Select>` and the task form category `<Select>` to use the merged list.
+   - For display (badge in task list), fall back to the raw string if the category isn't in the built-in enum.
+5. Validate: typecheck, lint, build pass.

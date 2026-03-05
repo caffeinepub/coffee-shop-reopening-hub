@@ -13,7 +13,7 @@ export default function Login() {
             ALL DAY
           </p>
           <p className="text-sidebar-foreground/30 text-xs uppercase tracking-widest mt-2 font-light">
-            Reopening Manager
+            Pop-Up Manager
           </p>
         </div>
         <div className="space-y-6">
@@ -27,7 +27,7 @@ export default function Login() {
           ))}
         </div>
         <p className="text-sidebar-foreground/20 text-xs font-light tracking-wide">
-          Your reopening, organized.
+          Your pop-ups, organized.
         </p>
       </div>
 
@@ -45,7 +45,7 @@ export default function Login() {
               ALL DAY
             </p>
             <p className="text-muted-foreground text-xs uppercase tracking-widest mt-1 font-light">
-              Reopening Manager
+              Pop-Up Manager
             </p>
           </div>
 
@@ -54,8 +54,7 @@ export default function Login() {
               Sign In
             </h1>
             <p className="text-muted-foreground text-sm font-light mt-3 leading-relaxed tracking-wide">
-              Access your reopening dashboard with a secure, passwordless
-              sign-in.
+              Access your pop-up dashboard with a secure, passwordless sign-in.
             </p>
           </div>
 

@@ -2,7 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   ChatMessage,
   Expense,
+  Ingredient,
+  InventoryCount,
   MenuItem,
+  Recipe,
   RevenueEntry,
   SalesGoal,
   Task,
@@ -10,6 +13,7 @@ import type {
   UserProfile,
 } from "../backend.d";
 import {
+  SEED_EXPENSES,
   SEED_MENU_ITEMS,
   SEED_SALES_GOALS,
   SEED_TASKS,
@@ -28,6 +32,11 @@ function asSeedMenuItems(): MenuItem[] {
 function asSeedGoals(): SalesGoal[] {
   return SEED_SALES_GOALS.map(
     (g, i) => ({ id: BigInt(i + 1000), ...g }) as SalesGoal,
+  );
+}
+function asSeedExpenses(): Expense[] {
+  return SEED_EXPENSES.map(
+    (e, i) => ({ id: BigInt(i + 1000), ...e }) as Expense,
   );
 }
 
@@ -320,10 +329,21 @@ export function useGetAllExpenses() {
   return useQuery<Expense[]>({
     queryKey: ["expenses"],
     queryFn: async () => {
-      if (!actor) return [];
-      return actor.getAllExpenses();
+      if (!actor) return asSeedExpenses();
+      const result = await actor.getAllExpenses();
+      // If canister was wiped and nothing returned, show seed data until
+      // useSeedData re-populates the backend
+      return result.length > 0 ? result : asSeedExpenses();
     },
     enabled: !!actor && !isFetching,
+    // Show seed expense immediately while waiting for backend
+    placeholderData: asSeedExpenses,
+    // Poll until we have real backend IDs (not our synthetic 1000+ ones)
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data && data.length > 0 && data[0].id < BigInt(1000)) return false;
+      return 4000;
+    },
   });
 }
 
@@ -410,6 +430,144 @@ export function useDeleteRevenueEntry() {
       return actor.deleteRevenueEntry(id);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["revenueEntries"] }),
+  });
+}
+
+// ─── Ingredients ──────────────────────────────────────────────────────────────
+
+export function useGetAllIngredients() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Ingredient[]>({
+    queryKey: ["ingredients"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllIngredients();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useCreateIngredient() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ingredient: Ingredient) => {
+      if (!actor) throw new Error("No actor");
+      return actor.createIngredient(ingredient);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ingredients"] }),
+  });
+}
+
+export function useUpdateIngredient() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ingredient: Ingredient) => {
+      if (!actor) throw new Error("No actor");
+      return actor.updateIngredient(ingredient);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ingredients"] }),
+  });
+}
+
+export function useDeleteIngredient() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => {
+      if (!actor) throw new Error("No actor");
+      return actor.deleteIngredient(id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ingredients"] }),
+  });
+}
+
+// ─── Recipes ──────────────────────────────────────────────────────────────────
+
+export function useGetAllRecipes() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Recipe[]>({
+    queryKey: ["recipes"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllRecipes();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useCreateRecipe() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (recipe: Recipe) => {
+      if (!actor) throw new Error("No actor");
+      return actor.createRecipe(recipe);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recipes"] }),
+  });
+}
+
+export function useUpdateRecipe() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (recipe: Recipe) => {
+      if (!actor) throw new Error("No actor");
+      return actor.updateRecipe(recipe);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recipes"] }),
+  });
+}
+
+export function useDeleteRecipe() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => {
+      if (!actor) throw new Error("No actor");
+      return actor.deleteRecipe(id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recipes"] }),
+  });
+}
+
+// ─── Inventory Counts ─────────────────────────────────────────────────────────
+
+export function useGetAllInventoryCounts() {
+  const { actor, isFetching } = useActor();
+  return useQuery<InventoryCount[]>({
+    queryKey: ["inventoryCounts"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllInventoryCounts();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useCreateInventoryCount() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (invCount: InventoryCount) => {
+      if (!actor) throw new Error("No actor");
+      return actor.createInventoryCount(invCount);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["inventoryCounts"] }),
+  });
+}
+
+export function useDeleteInventoryCount() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => {
+      if (!actor) throw new Error("No actor");
+      return actor.deleteInventoryCount(id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["inventoryCounts"] }),
   });
 }
 
