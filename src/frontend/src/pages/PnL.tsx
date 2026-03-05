@@ -2818,11 +2818,21 @@ export default function PnL() {
           if (importedDates.every((d) => d < REOPENING_DATE)) {
             setPhase("preopening");
           }
-          // Force immediate refetch of revenue and expenses so new entries appear right away
+          // Immediate invalidate + refetch
           queryClient.invalidateQueries({ queryKey: ["revenueEntries"] });
           queryClient.invalidateQueries({ queryKey: ["expenses"] });
           queryClient.refetchQueries({ queryKey: ["revenueEntries"] });
           queryClient.refetchQueries({ queryKey: ["expenses"] });
+          // Retry refetch at 500ms and 2000ms to catch any transient actor
+          // isFetching state that may have blocked the first refetch above.
+          setTimeout(() => {
+            queryClient.refetchQueries({ queryKey: ["revenueEntries"] });
+            queryClient.refetchQueries({ queryKey: ["expenses"] });
+          }, 500);
+          setTimeout(() => {
+            queryClient.refetchQueries({ queryKey: ["revenueEntries"] });
+            queryClient.refetchQueries({ queryKey: ["expenses"] });
+          }, 2000);
         }}
       />
     </div>

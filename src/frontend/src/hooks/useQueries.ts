@@ -386,19 +386,21 @@ export function useDeleteExpense() {
 // ─── Revenue Entries ──────────────────────────────────────────────────────────
 
 export function useGetAllRevenueEntries() {
-  const { actor, isFetching } = useActor();
+  const { actor } = useActor();
   return useQuery<RevenueEntry[]>({
     queryKey: ["revenueEntries"],
     queryFn: async () => {
       if (!actor) return [];
       return actor.getAllRevenueEntries();
     },
-    enabled: !!actor && !isFetching,
-    // Always show empty array while waiting; refetch every 5s to catch
-    // entries written by other mutations (Square import, manual add, etc.)
-    // Stop once at least one real entry is confirmed.
+    // Only gate on actor presence — do NOT gate on isFetching. If isFetching
+    // is true when invalidateQueries fires after a Square import, the enabled
+    // guard would block the refetch and revenue entries would never appear.
+    enabled: !!actor,
+    // Poll every 5s to catch entries written by concurrent mutations
+    // (Square import, manual add, etc.) without relying on invalidation alone.
     refetchInterval: 5000,
-    // Keep data fresh across tab focus
+    // Always treat data as stale so refetchQueries never skips a fetch.
     staleTime: 0,
   });
 }
