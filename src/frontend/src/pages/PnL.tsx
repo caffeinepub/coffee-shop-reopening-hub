@@ -1,5 +1,11 @@
 import type { Expense, RevenueEntry } from "@/backend.d";
 import { ExpenseCategory, PaymentStatus } from "@/backend.d";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -30,8 +37,19 @@ import {
   useUpdateExpense,
   useUpdateRevenueEntry,
 } from "@/hooks/useQueries";
-import { Loader2, Paperclip, Pencil, Plus, Trash2, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  FileText,
+  Loader2,
+  Paperclip,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -77,6 +95,1063 @@ const PAYMENT_STATUS_COLORS: Record<PaymentStatus, string> = {
   [PaymentStatus.paid]: "bg-emerald-50 text-emerald-700 border-emerald-200",
   [PaymentStatus.payable]: "bg-amber-50 text-amber-700 border-amber-200",
 };
+
+// ─── Square Import Types & Parsers ────────────────────────────────────────────
+
+interface SalesMixItem {
+  item: string;
+  quantity: number;
+  netSales: number;
+}
+
+interface ParsedSalesDay {
+  date: string; // YYYY-MM-DD
+  grossSales: number;
+  discounts: number;
+  netSales: number;
+  taxes: number;
+  tips: number;
+  totalCollected: number;
+  refunds: number;
+  salesMix: SalesMixItem[];
+  rawSource: string; // "Square PDF Import" | "Square CSV Import"
+}
+
+// Normalise a header/column name for matching
+function normHeader(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\s*\(usd\)/g, "")
+    .replace(/[^a-z0-9]/g, " ")
+    .trim();
+}
+
+// Try to parse a date string into YYYY-MM-DD
+function parseDate(raw: string): string | null {
+  if (!raw) return null;
+  // Already ISO
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw.trim())) return raw.trim();
+  // MM/DD/YYYY or M/D/YYYY
+  const mdy = raw.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mdy) {
+    const [, m, d, y] = mdy;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  // Month D, YYYY  e.g. "March 20, 2026"
+  const longDate = raw.trim().match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (longDate) {
+    const months: Record<string, string> = {
+      january: "01",
+      february: "02",
+      march: "03",
+      april: "04",
+      may: "05",
+      june: "06",
+      july: "07",
+      august: "08",
+      september: "09",
+      october: "10",
+      november: "11",
+      december: "12",
+    };
+    const [, mon, d, y] = longDate;
+    const mNum = months[mon.toLowerCase()];
+    if (mNum) return `${y}-${mNum}-${d.padStart(2, "0")}`;
+  }
+  // Try native Date
+  const d = new Date(raw.trim());
+  if (!Number.isNaN(d.getTime())) {
+    return d.toISOString().split("T")[0];
+  }
+  return null;
+}
+
+// Strip currency symbols and parse float
+function parseMoney(raw: string | undefined): number {
+  if (!raw) return 0;
+  const cleaned = String(raw)
+    .replace(/[$,\s]/g, "")
+    .replace(/[()]/g, "");
+  const n = Number.parseFloat(cleaned);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+// ─── CSV Parser ───────────────────────────────────────────────────────────────
+
+function parseSquareCSV(text: string): ParsedSalesDay[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+
+  // Find header row (first row with recognizable Square field)
+  let headerIdx = -1;
+  let headers: string[] = [];
+
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const cols = splitCSVLine(lines[i]).map(normHeader);
+    if (
+      cols.some(
+        (c) =>
+          c === "date" ||
+          c === "gross sales" ||
+          c === "net sales" ||
+          c === "total collected",
+      )
+    ) {
+      headerIdx = i;
+      headers = cols;
+      break;
+    }
+  }
+
+  if (headerIdx === -1) return [];
+
+  const idx = (names: string[]): number => {
+    for (const name of names) {
+      const i = headers.indexOf(name);
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+
+  const dateCol = idx(["date", "transaction date", "sale date"]);
+  const grossCol = idx(["gross sales", "gross revenue"]);
+  const discountCol = idx(["discounts", "discount"]);
+  const netCol = idx(["net sales", "net revenue"]);
+  const taxCol = idx(["tax", "taxes", "total tax"]);
+  const tipsCol = idx(["tips", "tip"]);
+  const totalCol = idx(["total collected", "total sales", "total"]);
+  const refundCol = idx(["refunds", "refund"]);
+  const itemCol = idx(["item", "item name", "product", "description"]);
+  const qtyCol = idx(["qty", "quantity", "units"]);
+
+  // Detect if this is a summary (one row per day) or item-level export
+  const isSummary =
+    itemCol === -1 && dateCol !== -1 && (grossCol !== -1 || netCol !== -1);
+
+  if (isSummary) {
+    // One row per day
+    const rows = lines.slice(headerIdx + 1);
+    const byDate: Record<string, ParsedSalesDay> = {};
+
+    for (const row of rows) {
+      const cols = splitCSVLine(row);
+      if (!cols[dateCol]) continue;
+      const date = parseDate(cols[dateCol]);
+      if (!date) continue;
+
+      byDate[date] = {
+        date,
+        grossSales: parseMoney(cols[grossCol]),
+        discounts: parseMoney(cols[discountCol]),
+        netSales: parseMoney(cols[netCol]),
+        taxes: parseMoney(cols[taxCol]),
+        tips: parseMoney(cols[tipsCol]),
+        totalCollected: parseMoney(cols[totalCol]),
+        refunds: parseMoney(cols[refundCol]),
+        salesMix: [],
+        rawSource: "Square CSV Import",
+      };
+    }
+    return Object.values(byDate);
+  }
+
+  // Item-level export — aggregate per day, collect sales mix
+  const rows = lines.slice(headerIdx + 1);
+  const byDate: Record<string, ParsedSalesDay> = {};
+
+  for (const row of rows) {
+    const cols = splitCSVLine(row);
+    const dateRaw = dateCol !== -1 ? cols[dateCol] : "";
+    const date = parseDate(dateRaw);
+    if (!date) continue;
+
+    if (!byDate[date]) {
+      byDate[date] = {
+        date,
+        grossSales: 0,
+        discounts: 0,
+        netSales: 0,
+        taxes: 0,
+        tips: 0,
+        totalCollected: 0,
+        refunds: 0,
+        salesMix: [],
+        rawSource: "Square CSV Import",
+      };
+    }
+
+    const entry = byDate[date];
+    entry.grossSales += parseMoney(cols[grossCol]);
+    entry.discounts += parseMoney(cols[discountCol]);
+    entry.netSales += parseMoney(cols[netCol]);
+    entry.taxes += parseMoney(cols[taxCol]);
+    entry.tips += parseMoney(cols[tipsCol]);
+    entry.totalCollected += parseMoney(cols[totalCol]);
+    entry.refunds += parseMoney(cols[refundCol]);
+
+    const itemName = itemCol !== -1 ? (cols[itemCol] ?? "").trim() : "";
+    const qty = qtyCol !== -1 ? Number.parseFloat(cols[qtyCol] ?? "1") || 1 : 1;
+    const itemNet = parseMoney(cols[netCol]);
+
+    if (itemName) {
+      const existing = entry.salesMix.find((s) => s.item === itemName);
+      if (existing) {
+        existing.quantity += qty;
+        existing.netSales += itemNet;
+      } else {
+        entry.salesMix.push({
+          item: itemName,
+          quantity: qty,
+          netSales: itemNet,
+        });
+      }
+    }
+  }
+
+  return Object.values(byDate);
+}
+
+// Minimal CSV line splitter that handles quoted fields
+function splitCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      inQuotes = !inQuotes;
+    } else if (c === "," && !inQuotes) {
+      result.push(current.trim().replace(/^"|"$/g, ""));
+      current = "";
+    } else {
+      current += c;
+    }
+  }
+  result.push(current.trim().replace(/^"|"$/g, ""));
+  return result;
+}
+
+// ─── PDF Parser (via CDN pdf.js) ──────────────────────────────────────────────
+
+const PDFJS_CDN =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+const PDFJS_WORKER_CDN =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+// Dynamically load pdf.js from CDN (only once)
+let pdfjsPromise: Promise<unknown> | null = null;
+
+type PdfJsLib = {
+  getDocument: (src: { data: ArrayBuffer }) => {
+    promise: Promise<PdfJsDoc>;
+  };
+  GlobalWorkerOptions: { workerSrc: string };
+};
+
+type PdfJsDoc = {
+  numPages: number;
+  getPage: (n: number) => Promise<PdfJsPage>;
+};
+
+type PdfJsPage = {
+  getTextContent: () => Promise<{ items: { str?: string }[] }>;
+};
+
+// Use indirect dynamic import to avoid Vite static analysis of CDN URL
+const dynamicImport = (url: string): Promise<unknown> =>
+  (Function("url", "return import(url)") as (u: string) => Promise<unknown>)(
+    url,
+  );
+
+async function loadPdfJs(): Promise<PdfJsLib> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = dynamicImport(PDFJS_CDN);
+  }
+  const lib = (await pdfjsPromise) as PdfJsLib;
+  lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
+  return lib;
+}
+
+async function extractPdfText(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfjs = await loadPdfJs();
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  let fullText = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map((item) => item.str ?? "").join(" ");
+    fullText += `${pageText}\n`;
+  }
+  return fullText;
+}
+
+// Extract structured sales data from unstructured PDF text using multiple strategies
+function parseSquarePDFText(text: string): ParsedSalesDay[] {
+  // ── Pre-process: split text into lines, also keep the raw text for scanning ──
+  const lines = text
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  // Strategy 1: Structured line-by-line parsing (date + label:value blocks)
+  const strategy1Results = parseSquarePDFStrategy1(lines);
+  if (strategy1Results.length > 0) return strategy1Results;
+
+  // Strategy 2: Scan ALL text for date + money value proximity
+  const strategy2Results = parseSquarePDFStrategy2(text, lines);
+  if (strategy2Results.length > 0) return strategy2Results;
+
+  // Strategy 3: Look for known Square summary keywords anywhere in the text
+  const strategy3Results = parseSquarePDFStrategy3(text, lines);
+  if (strategy3Results.length > 0) return strategy3Results;
+
+  // Strategy 4: If any dollar amounts found, use today's date as fallback
+  const strategy4Results = parseSquarePDFStrategy4(text);
+  return strategy4Results;
+}
+
+// Strategy 1: Original structured approach — date sections + label:value lines
+function parseSquarePDFStrategy1(lines: string[]): ParsedSalesDay[] {
+  const results: ParsedSalesDay[] = [];
+  let currentDate: string | null = null;
+  const fieldMap: Record<string, string> = {};
+  const salesMix: SalesMixItem[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Detect a date standalone or prefixed with "Date:"
+    const dateMatch = line.match(
+      /(?:^|\bDate[:\s]+)(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}|[A-Za-z]+ \d{1,2},?\s*\d{4})/i,
+    );
+    if (dateMatch) {
+      if (currentDate && Object.keys(fieldMap).length > 0) {
+        const entry = buildParsedDay(
+          currentDate,
+          fieldMap,
+          salesMix,
+          "Square PDF Import",
+        );
+        if (entry) results.push(entry);
+        for (const k of Object.keys(fieldMap)) delete fieldMap[k];
+        salesMix.length = 0;
+      }
+      const parsed = parseDate(dateMatch[1]);
+      if (parsed) currentDate = parsed;
+      continue;
+    }
+
+    // "Label: $value" or "Label  $value"
+    const labelValueMatch = line.match(
+      /^([A-Za-z\s]+?)[\s:]+\$?([\d,]+\.?\d*)\s*$/,
+    );
+    if (labelValueMatch) {
+      fieldMap[normHeader(labelValueMatch[1])] = labelValueMatch[2].replace(
+        /,/g,
+        "",
+      );
+      continue;
+    }
+
+    // "Item  qty  $amount" — sales mix
+    const itemLineMatch = line.match(/^(.+?)\s{2,}(\d+)\s+\$?([\d,]+\.?\d*)$/);
+    if (itemLineMatch && currentDate) {
+      salesMix.push({
+        item: itemLineMatch[1].trim(),
+        quantity: Number.parseInt(itemLineMatch[2], 10),
+        netSales: parseMoney(itemLineMatch[3]),
+      });
+    }
+  }
+
+  if (currentDate && Object.keys(fieldMap).length > 0) {
+    const entry = buildParsedDay(
+      currentDate,
+      fieldMap,
+      salesMix,
+      "Square PDF Import",
+    );
+    if (entry) results.push(entry);
+  }
+
+  return results;
+}
+
+// Strategy 2: Find all dates and all money values; associate nearby ones
+function parseSquarePDFStrategy2(
+  text: string,
+  lines: string[],
+): ParsedSalesDay[] {
+  // Collect all dates found in the text with their line index
+  const datesByLine: { lineIdx: number; date: string }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Try multiple date patterns on this line
+    const patterns = [
+      /(\d{1,2}\/\d{1,2}\/\d{2,4})/g,
+      /(\d{4}-\d{2}-\d{2})/g,
+      /([A-Za-z]{3,9}\s+\d{1,2},?\s*\d{4})/g,
+    ];
+    for (const pat of patterns) {
+      let m = pat.exec(line);
+      while (m !== null) {
+        const parsed = parseDate(m[1]);
+        if (parsed) {
+          datesByLine.push({ lineIdx: i, date: parsed });
+          break;
+        }
+        m = pat.exec(line);
+      }
+    }
+  }
+
+  if (datesByLine.length === 0) return [];
+
+  // Check if the text contains any money values at all (gate before heavier processing)
+  if (!/\$\s*[\d,]+\.?\d{0,2}/.test(text)) return [];
+
+  // For each date found, scan nearby lines (±10) for financial labels
+  const results: ParsedSalesDay[] = [];
+  const usedDates = new Set<string>();
+
+  for (const { lineIdx, date } of datesByLine) {
+    if (usedDates.has(date)) continue;
+
+    const windowStart = Math.max(0, lineIdx - 2);
+    const windowEnd = Math.min(lines.length - 1, lineIdx + 15);
+    const windowLines = lines.slice(windowStart, windowEnd + 1);
+    const windowText = windowLines.join(" ");
+
+    // Scan window for key financial labels + amounts
+    const fieldMap: Record<string, string> = {};
+
+    // Pattern: "LabelKeyword ... $amount" or "LabelKeyword amount"
+    const labelPatterns: [RegExp, string][] = [
+      [/gross\s+sales?\s*:?\s*\$?([\d,]+\.?\d*)/i, "gross sales"],
+      [/net\s+sales?\s*:?\s*\$?([\d,]+\.?\d*)/i, "net sales"],
+      [/total\s+collected?\s*:?\s*\$?([\d,]+\.?\d*)/i, "total collected"],
+      [/total\s+sales?\s*:?\s*\$?([\d,]+\.?\d*)/i, "total sales"],
+      [/gross\s+revenue\s*:?\s*\$?([\d,]+\.?\d*)/i, "gross revenue"],
+      [/net\s+revenue\s*:?\s*\$?([\d,]+\.?\d*)/i, "net revenue"],
+      [/tax(?:es)?\s*:?\s*\$?([\d,]+\.?\d*)/i, "taxes"],
+      [/tip(?:s)?\s*:?\s*\$?([\d,]+\.?\d*)/i, "tips"],
+      [/discount(?:s)?\s*:?\s*\$?([\d,]+\.?\d*)/i, "discounts"],
+      [/refund(?:s)?\s*:?\s*\$?([\d,]+\.?\d*)/i, "refunds"],
+    ];
+
+    for (const [pat, key] of labelPatterns) {
+      const match = windowText.match(pat);
+      if (match) fieldMap[key] = match[1].replace(/,/g, "");
+    }
+
+    // If no labeled values found in window, try the next 30 lines for any $ values
+    if (Object.keys(fieldMap).length === 0) {
+      const broadWindow = lines
+        .slice(lineIdx, Math.min(lines.length, lineIdx + 30))
+        .join(" ");
+      const broadMoney = /\$\s*([\d,]+\.?\d{0,2})/g;
+      const found: number[] = [];
+      let bm = broadMoney.exec(broadWindow);
+      while (bm !== null) {
+        const v = parseMoney(bm[1]);
+        if (v > 0) found.push(v);
+        bm = broadMoney.exec(broadWindow);
+      }
+      if (found.length > 0) {
+        // Assume the largest value is the total
+        const largest = Math.max(...found);
+        fieldMap["total collected"] = String(largest);
+      }
+    }
+
+    const entry = buildParsedDay(date, fieldMap, [], "Square PDF Import");
+    if (entry) {
+      results.push(entry);
+      usedDates.add(date);
+    }
+  }
+
+  return results;
+}
+
+// Strategy 3: Scan for Square-specific keywords like "Total Sales", "Net Sales" etc.
+// Handles concatenated text where words are jammed together
+function parseSquarePDFStrategy3(
+  text: string,
+  lines: string[],
+): ParsedSalesDay[] {
+  // Expand camelCase/PascalCase and common jammed patterns
+  const expanded = text
+    .replace(/([a-z])([A-Z])/g, "$1 $2") // camelCase -> camel Case
+    .replace(/([A-Z]{2,})([A-Z][a-z])/g, "$1 $2") // XMLParser -> XML Parser
+    .replace(/(\d)([A-Za-z])/g, "$1 $2") // 123abc -> 123 abc
+    .replace(/([A-Za-z])(\d)/g, "$1 $2"); // abc123 -> abc 123
+
+  const fieldMap: Record<string, string> = {};
+
+  // Comprehensive keyword patterns for Square's various report formats
+  const keywordPatterns: [RegExp, string][] = [
+    [/gross\s+sales?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "gross sales"],
+    [/net\s+sales?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "net sales"],
+    [
+      /total\s+collected?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i,
+      "total collected",
+    ],
+    [/total\s+sales?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "total sales"],
+    [/total\s+revenue\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "total collected"],
+    [/gross\s+revenue\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "gross sales"],
+    [/net\s+revenue\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "net sales"],
+    [/sales\s+total\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "total collected"],
+    [
+      /amount\s+collected?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i,
+      "total collected",
+    ],
+    [/total\s+amount\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "total collected"],
+    [/taxes?\s+collected?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "taxes"],
+    [/sales?\s+tax\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "taxes"],
+    [/tip(?:s)?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "tips"],
+    [/discount(?:s)?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "discounts"],
+    [/refund(?:s)?\s*[:\-]?\s*\$?\s*([\d,]+\.?\d{0,2})/i, "refunds"],
+  ];
+
+  for (const [pat, key] of keywordPatterns) {
+    const match = expanded.match(pat);
+    if (match && !fieldMap[key]) {
+      fieldMap[key] = match[1].replace(/,/g, "");
+    }
+  }
+
+  if (Object.keys(fieldMap).length === 0) return [];
+
+  // Try to extract a date from the text
+  let date: string | null = null;
+  const datePatterns = [
+    /(\d{1,2}\/\d{1,2}\/\d{2,4})/,
+    /(\d{4}-\d{2}-\d{2})/,
+    /([A-Za-z]{3,9}\s+\d{1,2},?\s*\d{4})/,
+    /(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})/,
+  ];
+  for (const pat of datePatterns) {
+    const m = text.match(pat);
+    if (m) {
+      date = parseDate(m[1]);
+      if (date) break;
+    }
+  }
+
+  // Also try lines
+  if (!date) {
+    for (const line of lines) {
+      for (const pat of datePatterns) {
+        const m = line.match(pat);
+        if (m) {
+          date = parseDate(m[1]);
+          if (date) break;
+        }
+      }
+      if (date) break;
+    }
+  }
+
+  if (!date) date = new Date().toISOString().split("T")[0];
+
+  const entry = buildParsedDay(date, fieldMap, [], "Square PDF Import");
+  return entry ? [entry] : [];
+}
+
+// Strategy 4: Pure fallback — if ANY dollar amounts found, group them under today
+function parseSquarePDFStrategy4(text: string): ParsedSalesDay[] {
+  const moneyPattern = /\$\s*([\d,]+\.?\d{0,2})/g;
+  const amounts: number[] = [];
+  let m = moneyPattern.exec(text);
+  while (m !== null) {
+    const v = parseMoney(m[1]);
+    if (v > 0) amounts.push(v);
+    m = moneyPattern.exec(text);
+  }
+
+  if (amounts.length === 0) return [];
+
+  // Use max value as total collected (most likely the "bottom line" in a receipt/report)
+  const total = Math.max(...amounts);
+  const date = new Date().toISOString().split("T")[0];
+
+  return [
+    {
+      date,
+      grossSales: total,
+      discounts: 0,
+      netSales: total,
+      taxes: 0,
+      tips: 0,
+      totalCollected: total,
+      refunds: 0,
+      salesMix: [],
+      rawSource: "Square PDF Import (estimated)",
+    },
+  ];
+}
+
+function buildParsedDay(
+  date: string,
+  fieldMap: Record<string, string>,
+  salesMix: SalesMixItem[],
+  rawSource: string,
+): ParsedSalesDay | null {
+  const get = (...keys: string[]): number => {
+    for (const k of keys) {
+      if (fieldMap[k] !== undefined) return parseMoney(fieldMap[k]);
+    }
+    return 0;
+  };
+
+  const gross = get("gross sales", "gross revenue", "gross");
+  const net = get("net sales", "net revenue", "net");
+  const total = get("total collected", "total sales", "total", "amount");
+  const taxes = get("tax", "taxes", "total tax");
+  const tips = get("tips", "tip");
+  const discounts = get("discounts", "discount");
+  const refunds = get("refunds", "refund");
+
+  // Only return if we found at least one monetary value
+  if (gross === 0 && net === 0 && total === 0) return null;
+
+  return {
+    date,
+    grossSales: gross,
+    discounts,
+    netSales: net,
+    taxes,
+    tips,
+    totalCollected: total,
+    refunds,
+    salesMix: [...salesMix],
+    rawSource,
+  };
+}
+
+// ─── Square Import Dialog ─────────────────────────────────────────────────────
+
+type ImportDialogState =
+  | { step: "idle" }
+  | { step: "parsing" }
+  | { step: "preview"; days: ParsedSalesDay[] }
+  | { step: "importing"; days: ParsedSalesDay[]; progress: number }
+  | { step: "done"; count: number }
+  | { step: "error"; message: string };
+
+interface SquareImportDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onManualEntry?: () => void;
+}
+
+function SquareImportDialog({
+  open,
+  onClose,
+  onManualEntry,
+}: SquareImportDialogProps) {
+  const userName = localStorage.getItem(STORAGE_KEY) ?? "Team";
+  const createRevenue = useCreateRevenueEntry();
+  const [state, setState] = useState<ImportDialogState>({ step: "idle" });
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset state when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setState({ step: "idle" });
+      setIsDragOver(false);
+    }
+  }, [open]);
+
+  const processFile = useCallback(async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext !== "csv" && ext !== "pdf") {
+      setState({
+        step: "error",
+        message: "Only .csv and .pdf files are supported.",
+      });
+      return;
+    }
+
+    setState({ step: "parsing" });
+
+    try {
+      let days: ParsedSalesDay[] = [];
+
+      if (ext === "csv") {
+        const text = await file.text();
+        days = parseSquareCSV(text);
+      } else {
+        // PDF
+        const text = await extractPdfText(file);
+        days = parseSquarePDFText(text);
+      }
+
+      if (days.length === 0) {
+        setState({
+          step: "error",
+          message:
+            "We couldn't automatically read this PDF. Square PDFs can vary in format. You can add this entry manually using the Add Revenue button, or try exporting as a CSV from Square Dashboard for automatic import.",
+        });
+        return;
+      }
+
+      setState({ step: "preview", days });
+    } catch (err) {
+      console.error("Square import parse error:", err);
+      setState({
+        step: "error",
+        message:
+          "We couldn't automatically read this PDF. Square PDFs can vary in format. You can add this entry manually using the Add Revenue button, or try exporting as a CSV from Square Dashboard for automatic import.",
+      });
+    }
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => setIsDragOver(false);
+
+  const handleConfirmImport = async () => {
+    if (state.step !== "preview") return;
+    const { days } = state;
+    setState({ step: "importing", days, progress: 0 });
+
+    let imported = 0;
+    for (const day of days) {
+      const revenue =
+        day.totalCollected > 0 ? day.totalCollected : day.netSales;
+      const notesParts: string[] = [];
+      if (day.salesMix.length > 0) {
+        notesParts.push(
+          day.salesMix.map((s) => `${s.item} x${s.quantity}`).join(", "),
+        );
+      }
+      if (day.discounts > 0)
+        notesParts.push(`Discounts: ${formatCurrency(day.discounts)}`);
+      if (day.refunds > 0)
+        notesParts.push(`Refunds: ${formatCurrency(day.refunds)}`);
+      if (day.tips > 0) notesParts.push(`Tips: ${formatCurrency(day.tips)}`);
+
+      try {
+        await createRevenue.mutateAsync({
+          id: BigInt(0),
+          date: day.date,
+          totalRevenue: revenue,
+          source: "Square Import",
+          notes: notesParts.join(" | "),
+          createdBy: userName,
+        });
+        imported++;
+        setState({
+          step: "importing",
+          days,
+          progress: Math.round((imported / days.length) * 100),
+        });
+      } catch {
+        // Continue on individual failure
+      }
+    }
+
+    setState({ step: "done", count: imported });
+    toast.success(
+      `${imported} revenue ${imported === 1 ? "entry" : "entries"} added from Square export`,
+    );
+  };
+
+  const handleClose = () => {
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent data-ocid="pnl.import_dialog" className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="uppercase tracking-widest text-sm font-medium flex items-center gap-2">
+            <Upload className="w-4 h-4 text-muted-foreground" />
+            Import Square Sales File
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* ── IDLE: drop zone ── */}
+        {state.step === "idle" && (
+          <div className="space-y-4 py-2">
+            <button
+              type="button"
+              data-ocid="pnl.sales_dropzone"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ")
+                  fileInputRef.current?.click();
+              }}
+              className={`relative w-full border-2 border-dashed cursor-pointer transition-all duration-150 px-8 py-12 flex flex-col items-center gap-3 text-center select-none ${
+                isDragOver
+                  ? "border-foreground/60 bg-accent/40"
+                  : "border-border hover:border-foreground/30 hover:bg-accent/20"
+              }`}
+            >
+              <FileText
+                className={`w-8 h-8 transition-colors duration-150 ${
+                  isDragOver ? "text-foreground" : "text-muted-foreground/60"
+                }`}
+              />
+              <div>
+                <p className="text-sm font-light text-foreground">
+                  Drop your Square export here
+                </p>
+                <p className="text-xs text-muted-foreground font-light mt-1">
+                  or click to browse &mdash; CSV or PDF
+                </p>
+              </div>
+              <p className="text-[10px] text-muted-foreground/50 uppercase tracking-widest font-light">
+                Daily EOD exports, Summary, or Item Sales reports
+              </p>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.pdf"
+              onChange={handleFileChange}
+              className="sr-only"
+              aria-label="Upload Square sales file"
+            />
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                data-ocid="pnl.import_cancel_button"
+                onClick={handleClose}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── PARSING ── */}
+        {state.step === "parsing" && (
+          <div className="py-14 flex flex-col items-center gap-3 text-muted-foreground">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <p className="text-xs uppercase tracking-widest font-light">
+              Reading file…
+            </p>
+          </div>
+        )}
+
+        {/* ── PREVIEW ── */}
+        {state.step === "preview" && (
+          <div className="space-y-4 py-1">
+            <p className="text-xs text-muted-foreground font-light">
+              Found{" "}
+              <span className="text-foreground font-medium">
+                {state.days.length}
+              </span>{" "}
+              day{state.days.length !== 1 ? "s" : ""} of sales data. Review and
+              confirm to add to Financials.
+            </p>
+
+            <ScrollArea className="h-72 border border-border">
+              <Accordion type="multiple" className="divide-y divide-border">
+                {state.days.map((day, idx) => (
+                  <AccordionItem
+                    key={day.date}
+                    value={day.date}
+                    data-ocid={`pnl.import_preview.item.${idx + 1}`}
+                    className="border-0"
+                  >
+                    <AccordionTrigger className="px-4 py-3 hover:bg-accent/20 hover:no-underline text-left [&>svg]:hidden">
+                      <div className="flex items-center justify-between w-full gap-4 pr-2">
+                        <div className="flex items-center gap-4">
+                          <span className="text-xs text-muted-foreground font-light w-24 shrink-0">
+                            {formatDate(day.date)}
+                          </span>
+                          <div className="flex items-center gap-3 text-[10px] text-muted-foreground/70 font-light flex-wrap">
+                            {day.grossSales > 0 && (
+                              <span>
+                                Gross {formatCurrency(day.grossSales)}
+                              </span>
+                            )}
+                            {day.discounts > 0 && (
+                              <span className="text-amber-600">
+                                Disc −{formatCurrency(day.discounts)}
+                              </span>
+                            )}
+                            {day.taxes > 0 && (
+                              <span>Tax {formatCurrency(day.taxes)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-medium text-emerald-700">
+                            +
+                            {formatCurrency(
+                              day.totalCollected > 0
+                                ? day.totalCollected
+                                : day.netSales,
+                            )}
+                          </span>
+                          {day.salesMix.length > 0 && (
+                            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground transition-transform duration-150 [[data-state=open]>&]:rotate-180" />
+                          )}
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    {day.salesMix.length > 0 && (
+                      <AccordionContent className="pb-0">
+                        <div className="px-4 pb-3 space-y-1">
+                          {day.salesMix.map((mix) => (
+                            <div
+                              key={mix.item}
+                              className="flex justify-between text-[11px] text-muted-foreground font-light pl-24"
+                            >
+                              <span>
+                                {mix.item}{" "}
+                                <span className="text-muted-foreground/60">
+                                  ×{mix.quantity}
+                                </span>
+                              </span>
+                              <span>{formatCurrency(mix.netSales)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    )}
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </ScrollArea>
+
+            <DialogFooter className="gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                data-ocid="pnl.import_cancel_button"
+                onClick={handleClose}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                data-ocid="pnl.import_confirm_button"
+                onClick={handleConfirmImport}
+              >
+                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                Add {state.days.length}{" "}
+                {state.days.length === 1 ? "Entry" : "Entries"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* ── IMPORTING ── */}
+        {state.step === "importing" && (
+          <div className="py-14 flex flex-col items-center gap-4 text-muted-foreground">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <div className="text-center space-y-1.5">
+              <p className="text-xs uppercase tracking-widest font-light">
+                Saving entries…
+              </p>
+              <p className="text-[10px] text-muted-foreground/60">
+                {state.progress}% complete
+              </p>
+            </div>
+            <div className="w-48 h-px bg-border overflow-hidden relative">
+              <div
+                className="absolute inset-y-0 left-0 bg-foreground/40 transition-all duration-300"
+                style={{ width: `${state.progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── DONE ── */}
+        {state.step === "done" && (
+          <div className="py-14 flex flex-col items-center gap-3 text-muted-foreground">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            <p className="text-xs uppercase tracking-widest font-light">
+              {state.count} {state.count === 1 ? "entry" : "entries"} added
+            </p>
+            <Button size="sm" onClick={handleClose} className="mt-2">
+              Close
+            </Button>
+          </div>
+        )}
+
+        {/* ── ERROR ── */}
+        {state.step === "error" && (
+          <div
+            data-ocid="pnl.import_error_state"
+            className="py-8 flex flex-col items-center gap-4 text-muted-foreground"
+          >
+            <AlertCircle className="w-6 h-6 text-destructive" />
+            <div className="text-center space-y-1 max-w-sm">
+              <p className="text-sm font-light text-foreground">
+                {state.message}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 mt-2 items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                data-ocid="pnl.import_cancel_button"
+                onClick={handleClose}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                data-ocid="pnl.import_try_file_button"
+                onClick={() => {
+                  setState({ step: "idle" });
+                  // Slight delay so the file input re-renders cleanly
+                  setTimeout(() => fileInputRef.current?.click(), 100);
+                }}
+              >
+                Try Different File
+              </Button>
+              {onManualEntry && (
+                <Button
+                  size="sm"
+                  data-ocid="pnl.import_manual_entry_button"
+                  onClick={() => {
+                    handleClose();
+                    onManualEntry();
+                  }}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add Revenue Manually
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ─── Date Range Helpers ───────────────────────────────────────────────────────
 
@@ -761,11 +1836,14 @@ export default function PnL() {
   const [search, setSearch] = useState("");
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [revenueDialogOpen, setRevenueDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editingRevenue, setEditingRevenue] = useState<RevenueEntry | null>(
     null,
   );
   const [togglingId, setTogglingId] = useState<bigint | null>(null);
+  const [dropzoneOver, setDropzoneOver] = useState(false);
+  const inlineFileRef = useRef<HTMLInputElement>(null);
 
   const { data: allExpenses = [], isLoading: expensesLoading } =
     useGetAllExpenses();
@@ -1176,33 +2254,80 @@ export default function PnL() {
 
           {/* Revenue section */}
           <section className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <h2 className="heading-editorial text-sm">Revenue</h2>
               </div>
-              <Button
-                size="sm"
-                data-ocid="pnl.add_revenue_button"
-                variant="outline"
-                onClick={() => {
-                  setEditingRevenue(null);
-                  setRevenueDialogOpen(true);
-                }}
-                className="gap-1.5 text-xs uppercase tracking-widest font-medium"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Revenue
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  data-ocid="pnl.upload_sales_button"
+                  onClick={() => setImportDialogOpen(true)}
+                  className="gap-1.5 text-xs uppercase tracking-widest font-medium"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Upload Sales File
+                </Button>
+                <Button
+                  size="sm"
+                  data-ocid="pnl.add_revenue_button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingRevenue(null);
+                    setRevenueDialogOpen(true);
+                  }}
+                  className="gap-1.5 text-xs uppercase tracking-widest font-medium"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Revenue
+                </Button>
+              </div>
             </div>
 
-            {/* Square note */}
-            <div className="flex items-start gap-2.5 bg-muted/60 border border-border px-4 py-3">
-              <Upload className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+            {/* Inline drag-and-drop dropzone */}
+            <button
+              type="button"
+              data-ocid="pnl.sales_dropzone"
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDropzoneOver(true);
+              }}
+              onDragLeave={() => setDropzoneOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDropzoneOver(false);
+                setImportDialogOpen(true);
+              }}
+              onClick={() => setImportDialogOpen(true)}
+              className={`w-full flex items-center gap-3 border border-dashed cursor-pointer px-4 py-3 transition-all duration-150 text-left ${
+                dropzoneOver
+                  ? "border-foreground/50 bg-accent/40"
+                  : "border-border/60 hover:border-foreground/30 hover:bg-accent/10"
+              }`}
+            >
+              <Upload
+                className={`h-3.5 w-3.5 shrink-0 transition-colors duration-150 ${dropzoneOver ? "text-foreground" : "text-muted-foreground"}`}
+              />
               <p className="text-xs text-muted-foreground font-light leading-relaxed">
-                Square integration coming soon — upload EOD exports manually for
-                now using "Add Revenue" above.
+                Drop a Square EOD export here, or click "Upload Sales File" to
+                import CSV or PDF &mdash; revenue entries are added
+                automatically.
               </p>
-            </div>
+            </button>
+            <input
+              ref={inlineFileRef}
+              type="file"
+              accept=".csv,.pdf"
+              className="sr-only"
+              aria-label="Upload Square sales file"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setImportDialogOpen(true);
+                }
+                e.target.value = "";
+              }}
+            />
 
             <Separator />
 
@@ -1290,6 +2415,16 @@ export default function PnL() {
           setEditingRevenue(null);
         }}
         editingEntry={editingRevenue}
+      />
+
+      <SquareImportDialog
+        open={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        onManualEntry={() => {
+          setImportDialogOpen(false);
+          setEditingRevenue(null);
+          setRevenueDialogOpen(true);
+        }}
       />
     </div>
   );
